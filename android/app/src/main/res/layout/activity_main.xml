@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8F9FA">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="32dp"
+            android:paddingBottom="32dp">
+
+            <ImageView
+                android:id="@+id/ivStatus"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:src="@android:drawable/ic_menu_manage"
+                android:tint="#1D4ED8" />
+
+            <TextView
+                android:id="@+id/tvStatusTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MDM Enterprise"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#111827"
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:id="@+id/tvStatusSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mobile Device Management"
+                android:textSize="14sp"
+                android:textColor="#6B7280"
+                android:layout_marginTop="4dp"
+                android:gravity="center" />
+
+        </LinearLayout>
+
+        <!-- Not enrolled card -->
+        <LinearLayout
+            android:id="@+id/layoutEnroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:elevation="2dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Cadastrar este Dispositivo"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#111827" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Escaneie o QR code do console E.Guardian para registrar este dispositivo."
+                android:textSize="14sp"
+                android:textColor="#6B7280"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btnEnroll"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Escanear QR Code"
+                android:backgroundTint="#1D4ED8"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnTestEnroll"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Configurar URL do Servidor (Dev)"
+                android:backgroundTint="#6B7280"
+                android:textColor="#FFFFFF"
+                android:layout_marginTop="8dp" />
+
+        </LinearLayout>
+
+        <!-- Enrolled card -->
+        <LinearLayout
+            android:id="@+id/layoutEnrolled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:elevation="2dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓ Dispositivo Cadastrado"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#065F46" />
+
+            <TextView
+                android:id="@+id/tvDeviceOwner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Proprietário: Verificando..."
+                android:textSize="13sp"
+                android:textColor="#374151"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/tvServerUrl"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Servidor: ..."
+                android:textSize="13sp"
+                android:textColor="#374151"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Comandos verificados a cada 15 minutos. Localização rastreada conforme política."
+                android:textSize="12sp"
+                android:textColor="#9CA3AF"
+                android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/btnPollNow"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Verificar Comandos Agora (Dev)"
+                android:backgroundTint="#6B7280"
+                android:textColor="#FFFFFF"
+                android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/btnLogout"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Sair da Conta"
+                android:backgroundTint="#DC2626"
+                android:textColor="#FFFFFF"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Install progress card -->
+        <LinearLayout
+            android:id="@+id/layoutInstallProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="20dp"
+            android:elevation="2dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⬇ Instalando Aplicativos"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1D4ED8"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:id="@+id/installItemsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

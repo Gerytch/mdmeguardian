@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootDeviceLogin"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="40dp"
+    android:background="#1E3A5F">
+
+    <ImageView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:src="@android:drawable/ic_lock_lock"
+        android:tint="#FFFFFF"
+        android:alpha="0.8"
+        android:layout_marginBottom="24dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="IDENTIFICAÇÃO NECESSÁRIA"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.15"
+        android:alpha="0.6"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Faça login para continuar"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:gravity="center"
+        android:layout_marginBottom="40dp" />
+
+    <EditText
+        android:id="@+id/etUsername"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:hint="Usuário / Matrícula"
+        android:textColorHint="#80FFFFFF"
+        android:textColor="#FFFFFF"
+        android:background="#33FFFFFF"
+        android:paddingHorizontal="16dp"
+        android:inputType="text"
+        android:imeOptions="actionNext"
+        android:layout_marginBottom="12dp" />
+
+    <EditText
+        android:id="@+id/etPin"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:hint="PIN (4-6 dígitos)"
+        android:textColorHint="#80FFFFFF"
+        android:textColor="#FFFFFF"
+        android:background="#33FFFFFF"
+        android:paddingHorizontal="16dp"
+        android:inputType="numberPassword"
+        android:maxLength="6"
+        android:imeOptions="actionDone"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvLoginError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#FFCCCC"
+        android:textSize="13sp"
+        android:gravity="center"
+        android:layout_marginBottom="16dp"
+        android:visibility="invisible" />
+
+    <Button
+        android:id="@+id/btnLogin"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Entrar"
+        android:textSize="16sp"
+        android:textColor="#1E3A5F"
+        android:backgroundTint="#FFFFFF"
+        android:layout_marginBottom="24dp" />
+
+    <ProgressBar
+        android:id="@+id/progressLogin"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:visibility="gone" />
+
+</LinearLayout>

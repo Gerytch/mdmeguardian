@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootAdminLock"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="40dp"
+    android:background="#1E3A5F">
+
+    <!-- Lock icon -->
+    <ImageView
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:src="@android:drawable/ic_lock_lock"
+        android:tint="#FFFFFF"
+        android:alpha="0.9"
+        android:layout_marginBottom="32dp" />
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="DISPOSITIVO BLOQUEADO"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.15"
+        android:alpha="0.7"
+        android:layout_marginBottom="20dp" />
+
+    <!-- Main message -->
+    <TextView
+        android:id="@+id/tvAdminMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Leve este dispositivo ao setor de TI"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.3"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Divider -->
+    <View
+        android:layout_width="60dp"
+        android:layout_height="2dp"
+        android:background="#55FFFFFF"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Contact info -->
+    <TextView
+        android:id="@+id/tvAdminContact"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#CCFFFFFF"
+        android:textSize="15sp"
+        android:gravity="center"
+        android:layout_marginBottom="48dp"
+        android:visibility="gone" />
+
+    <!-- IT logo placeholder -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Setor de Tecnologia da Informação"
+        android:textColor="#55FFFFFF"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:layout_marginBottom="64dp" />
+
+
+</LinearLayout>

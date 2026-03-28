@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">E.Guardian MDM</string>
+    <string name="device_admin_label">E.Guardian Administrador</string>
+    <string name="device_admin_description">Permite ao E.Guardian MDM gerenciar e proteger este dispositivo.</string>
+    <string name="channel_commands_name">Comandos MDM</string>
+    <string name="channel_commands_desc">Notificações de comandos do dispositivo</string>
+    <string name="accessibility_service_description">Permite ao E.Guardian capturar a tela para diagnósticos de rede remotos.</string>
+</resources>
