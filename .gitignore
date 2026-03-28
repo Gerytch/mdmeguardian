@@ -78,6 +78,16 @@ desktop.ini
 .claude/settings.local.json
 
 # =====================
+# Uploads (arquivos binários grandes)
+# =====================
+backend/uploads/
+
+# =====================
+# TypeScript build info
+# =====================
+*.tsbuildinfo
+
+# =====================
 # Misc
 # =====================
 *.tmp
