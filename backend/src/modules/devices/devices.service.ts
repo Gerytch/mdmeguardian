@@ -1,0 +1,218 @@
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  GoneException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
+import { Device, DeviceStatus } from './entities/device.entity';
+import { EnrollmentToken } from './entities/enrollment-token.entity';
+import { RegisterDeviceDto } from './dto/register-device.dto';
+import { UpdateDeviceDto, DeviceHeartbeatDto } from './dto/update-device.dto';
+import { Command, CommandStatus, CommandType } from '../commands/entities/command.entity';
+
+@Injectable()
+export class DevicesService {
+  constructor(
+    @InjectRepository(Device)
+    private readonly deviceRepository: Repository<Device>,
+    @InjectRepository(Command)
+    private readonly commandRepository: Repository<Command>,
+    @InjectRepository(EnrollmentToken)
+    private readonly enrollmentTokenRepository: Repository<EnrollmentToken>,
+  ) {}
+
+  private generateDeviceToken(): string {
+    return crypto.randomBytes(48).toString('hex');
+  }
+
+  async register(tenantId: string, dto: RegisterDeviceDto): Promise<Device & { deviceToken: string }> {
+    const existing = await this.deviceRepository.findOne({
+      where: { tenantId, serialNumber: dto.serialNumber },
+    });
+    if (existing) {
+      throw new ConflictException(`Device serial "${dto.serialNumber}" already registered`);
+    }
+
+    const deviceToken = this.generateDeviceToken();
+
+    const device = this.deviceRepository.create({
+      tenantId,
+      name: dto.name,
+      serialNumber: dto.serialNumber,
+      imei: dto.imei ?? null,
+      androidVersion: dto.androidVersion ?? null,
+      manufacturer: dto.manufacturer ?? null,
+      model: dto.model ?? null,
+      policyId: dto.policyId ?? null,
+      deviceToken,
+      enrollmentDate: new Date(),
+      status: DeviceStatus.ACTIVE,
+      isOnline: true,
+      lastSeenAt: new Date(),
+    });
+
+    const saved = await this.deviceRepository.save(device);
+    return { ...saved, deviceToken } as Device & { deviceToken: string };
+  }
+
+  async findAll(tenantId: string): Promise<Device[]> {
+    return this.deviceRepository.find({
+      where: { tenantId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findOne(tenantId: string, id: string): Promise<Device> {
+    const device = await this.deviceRepository.findOne({ where: { id, tenantId } });
+    if (!device) throw new NotFoundException(`Device "${id}" not found`);
+    return device;
+  }
+
+  async findByToken(deviceToken: string): Promise<Device | null> {
+    return this.deviceRepository
+      .createQueryBuilder('device')
+      .addSelect('device.deviceToken')
+      .where('device.deviceToken = :deviceToken', { deviceToken })
+      .getOne();
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateDeviceDto): Promise<Device> {
+    const device = await this.findOne(tenantId, id);
+    if (dto.name !== undefined) device.name = dto.name;
+    if (dto.status !== undefined) device.status = dto.status;
+    if (dto.policyId !== undefined) device.policyId = dto.policyId;
+    if (dto.currentUserId !== undefined) device.currentUserId = dto.currentUserId;
+    if (dto.isKioskMode !== undefined) device.isKioskMode = dto.isKioskMode;
+    if (dto.kioskApps !== undefined) device.kioskApps = dto.kioskApps;
+    if (dto.osVersion !== undefined) device.osVersion = dto.osVersion;
+    return this.deviceRepository.save(device);
+  }
+
+  async heartbeat(tenantId: string, id: string, dto: DeviceHeartbeatDto): Promise<Device> {
+    const device = await this.findOne(tenantId, id);
+    device.lastSeenAt = new Date();
+    device.isOnline = dto.isOnline ?? true;
+    if (dto.batteryLevel !== undefined) device.batteryLevel = dto.batteryLevel;
+    if (dto.osVersion !== undefined) device.osVersion = dto.osVersion;
+    return this.deviceRepository.save(device);
+  }
+
+  async updateDeviceStatus(tenantId: string, id: string, status: DeviceStatus): Promise<Device> {
+    const device = await this.findOne(tenantId, id);
+    device.status = status;
+    if (status === DeviceStatus.WIPED) {
+      device.isKioskMode = false;
+      device.kioskApps = [];
+      device.policyId = null;
+    }
+    return this.deviceRepository.save(device);
+  }
+
+  async sendCommand(
+    tenantId: string,
+    deviceId: string,
+    type: CommandType,
+    payload: Record<string, any>,
+    createdBy: string,
+  ): Promise<Command> {
+    await this.findOne(tenantId, deviceId);
+    const command = this.commandRepository.create({
+      tenantId,
+      deviceId,
+      type,
+      payload,
+      status: CommandStatus.PENDING,
+      createdBy,
+    });
+    return this.commandRepository.save(command);
+  }
+
+  async getOnlineDevices(tenantId: string): Promise<Device[]> {
+    return this.deviceRepository.find({
+      where: { tenantId, isOnline: true, status: DeviceStatus.ACTIVE },
+    });
+  }
+
+  async markOfflineStaleDevices(thresholdMinutes = 5): Promise<void> {
+    const threshold = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+
+    // Find stale online devices before marking them offline
+    const staleDevices = await this.deviceRepository
+      .createQueryBuilder('device')
+      .select('device.id')
+      .where('device.isOnline = true AND device.lastSeenAt < :threshold', { threshold })
+      .getMany();
+
+    if (staleDevices.length === 0) return;
+
+    const staleIds = staleDevices.map((d) => d.id);
+
+    await this.deviceRepository
+      .createQueryBuilder()
+      .update(Device)
+      .set({ isOnline: false })
+      .whereInIds(staleIds)
+      .execute();
+
+    // Cancel PENDING commands for devices that just went offline
+    await this.commandRepository
+      .createQueryBuilder()
+      .update(Command)
+      .set({ status: CommandStatus.FAILED, result: () => `'{"cancelled":true,"reason":"device_offline"}'::jsonb` })
+      .where('deviceId IN (:...staleIds) AND status = :status', {
+        staleIds,
+        status: CommandStatus.PENDING,
+      })
+      .execute();
+  }
+
+  async remove(tenantId: string, id: string): Promise<void> {
+    const device = await this.findOne(tenantId, id);
+    await this.deviceRepository.remove(device);
+  }
+
+  // ─── Enrollment Token (QR-based zero-touch enrollment) ────────────────────
+
+  async generateEnrollmentToken(
+    tenantId: string,
+    policyId?: string,
+  ): Promise<{ token: string; expiresAt: Date; qrPayload: string }> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.enrollmentTokenRepository.save(
+      this.enrollmentTokenRepository.create({ tenantId, policyId: policyId ?? null, token, expiresAt }),
+    );
+
+    const qrPayload = JSON.stringify({ tenantId, enrollmentToken: token, policyId: policyId ?? null });
+    return { token, expiresAt, qrPayload };
+  }
+
+  async enrollWithToken(
+    tenantId: string,
+    enrollmentToken: string,
+    dto: RegisterDeviceDto,
+  ): Promise<Device & { deviceToken: string }> {
+    const record = await this.enrollmentTokenRepository.findOne({
+      where: { token: enrollmentToken, tenantId },
+    });
+
+    if (!record) throw new NotFoundException('Invalid enrollment token');
+    if (record.used) throw new GoneException('Enrollment token already used');
+    if (record.expiresAt < new Date()) throw new GoneException('Enrollment token expired');
+
+    // Mark token as used before registering (prevent race conditions)
+    await this.enrollmentTokenRepository.update(record.id, { used: true });
+
+    const device = await this.register(tenantId, {
+      ...dto,
+      policyId: dto.policyId ?? record.policyId ?? undefined,
+    });
+
+    return device;
+  }
+}

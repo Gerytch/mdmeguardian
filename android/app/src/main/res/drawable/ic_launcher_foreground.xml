@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shield outline (white) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,16 L84,29 L84,54 C84,71 71,83 54,92 C37,83 24,71 24,54 L24,29 Z" />
+    <!-- Shield inner (brand color) -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M54,24 L78,35 L78,54 C78,67 67,77 54,84 C41,77 30,67 30,54 L30,35 Z" />
+    <!-- Letter E -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,44 L36,64 L50,64 L50,60 L40,60 L40,56 L49,56 L49,52 L40,52 L40,48 L50,48 L50,44 Z" />
+    <!-- Letter G -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,44 L60,44 L60,64 L56,64 Z M60,44 L74,44 L74,48 L60,48 Z M60,60 L74,60 L74,64 L60,64 Z M64,52 L74,52 L74,60 L70,60 L70,56 L64,56 Z" />
+</vector>
