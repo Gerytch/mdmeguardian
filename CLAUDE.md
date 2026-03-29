@@ -149,15 +149,21 @@ O E.Guardian precisa ser Device Owner para:
 | `isKioskMode` não atualizava no banco | `acknowledgeCommand` não sincronizava estado | Adicionado update em `acknowledgeCommand` |
 | Apps obrigatórios não apareciam no seletor | `syncFromDevice` sobrescrevia `isSystem=false` com `true` | Substituído upsert por find + insert condicional |
 | UPDATE_POLICY chegava com payload vazio `{}` | Frontend enviava sem payload | Backend auto-popula de policy atribuída ao device |
+| Double-poll bug (commands executados múltiplas vezes) | `onStartCommand` lançava novas coroutines sem cancelar as anteriores | `pollingJob?.cancel()` antes de `startPollingLoop()`; watchdog virou filho do job |
+| Crash API 25 ao aplicar policy com USB bloqueado | `setUsbDataSignalingEnabled()` é API 31+ — lança `NoSuchMethodError` (não pego por `catch Exception`) | Guard `Build.VERSION.SDK_INT >= S` em `blockUSBDataTransfer()` |
+| Listagem de device-users retornava 500 | `ValidationPipe` com `enableImplicitConversion` converte `@Query` ausente para `NaN`; `NaN ?? 1 = NaN` | Troca `??` por `\|\|` no `findAll` (page/limit defaults) |
+| Mesmo usuário logado em 2 dispositivos simultaneamente | `closeActiveForDevice` fechava só sessão do device atual, não do user | `closeActiveForUser` fecha todas sessões do user; `validateSession` (GET 410) + re-login com toast no Android |
 
 ---
 
 ## Estado Atual do Banco de Dados (Emulador)
 
-- Tenant: E.Guardian (default de dev)
-- Device: emulador com E.Guardian como Device Owner
+- Tenant: E.Guardian (`2c55c328-daa0-4342-9ec9-b36864264878`)
+- 4 devices ativos (ver memory/project_emulators.md para IDs e tokens atuais)
+- Device-user: `teste` / pin `1234` (ACTIVE)
 - Apps com `isSystem=false` (aparecem no seletor): ForlogWMS, Gestor WMS, WiFiman, GLPI Agent, ES File Explorer
 - Policy padrão: com regras e apps obrigatórios configurados
+- Git: inicializado em `C:\claude\e.guardian-master`, commit `06f4c9a`
 
 ---
 
