@@ -112,9 +112,12 @@ export class CommandsController {
   /** Android agent polls for pending commands. Header: X-Device-Token */
   @Public()
   @Get('device/commands/pending')
-  getPending(@Headers('x-device-token') token: string): Promise<Command[]> {
+  getPending(
+    @Headers('x-device-token') token: string,
+    @Headers('x-agent-version') agentVersion: string,
+  ): Promise<Command[]> {
     if (!token) throw new UnauthorizedException('X-Device-Token header is required');
-    return this.commandsService.getPendingForDevice(token);
+    return this.commandsService.getPendingForDevice(token, agentVersion || null);
   }
 
   /** Android agent syncs installed app list on enrollment. Header: X-Device-Token */

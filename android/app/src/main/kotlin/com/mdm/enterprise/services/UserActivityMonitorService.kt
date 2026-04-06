@@ -3,6 +3,7 @@ package com.mdm.enterprise.services
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -23,7 +24,9 @@ class UserActivityMonitorService : Service() {
     companion object {
         private const val TAG = "ActivityMonitor"
         private const val CHANNEL_ID = "mdm_activity_monitor"
+        private const val TIMEOUT_CHANNEL_ID = "mdm_session_timeout"
         private const val NOTIF_ID = 3002
+        private const val TIMEOUT_NOTIF_ID = 3003
         private const val EXTRA_TIMEOUT_MIN = "timeout_minutes"
 
         @Volatile private var lastActivityMs = AtomicLong(System.currentTimeMillis())
@@ -89,15 +92,60 @@ class UserActivityMonitorService : Service() {
             Log.w(TAG, "Failed to report timeout: ${e.message}")
         }
 
-        // Clear session and show login
+        // Clear session — CommandPollingService watchdog will detect the missing session
+        // and fire the full-screen login notification every 2s until user logs in.
         DeviceLoginActivity.clearSession(this)
-        DeviceLoginActivity.start(this)
         stopSelf()
     }
 
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun postTimeoutAlert(ctx: Context) {
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (nm.getNotificationChannel(TIMEOUT_CHANNEL_ID) == null) {
+                nm.createNotificationChannel(
+                    NotificationChannel(
+                        TIMEOUT_CHANNEL_ID,
+                        "Sessão Expirada",
+                        NotificationManager.IMPORTANCE_HIGH,
+                    ).apply {
+                        description = "Exibe tela de login após inatividade"
+                        setShowBadge(false)
+                        enableLights(false)
+                        enableVibration(false)
+                    }
+                )
+            }
+        }
+
+        val fullScreenIntent = Intent(ctx, DeviceLoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(DeviceLoginActivity.EXTRA_REASON, "Sessão encerrada por inatividade")
+        }
+        val pi = PendingIntent.getActivity(
+            ctx, TIMEOUT_NOTIF_ID, fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val notification = NotificationCompat.Builder(ctx, TIMEOUT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+            .setContentTitle("Sessão Expirada")
+            .setContentText("Sua sessão expirou por inatividade. Faça login novamente.")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pi, true)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+
+        nm.notify(TIMEOUT_NOTIF_ID, notification)
     }
 
     private fun createNotificationChannel() {

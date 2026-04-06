@@ -3,6 +3,7 @@ package com.mdm.enterprise
 import android.app.Application
 import android.util.Log
 import androidx.work.WorkManager
+import com.mdm.enterprise.services.CommandPollingService
 import com.mdm.enterprise.services.CommandPollingWorker
 import com.mdm.enterprise.services.LocationTrackingWorker
 import com.mdm.enterprise.utils.SecurePreferences
@@ -29,7 +30,18 @@ class MdmApplication : Application() {
             return
         }
 
-        Log.i(TAG, "Scheduling background workers")
+        Log.i(TAG, "Starting foreground service and scheduling background workers")
+        // Start the real-time foreground service immediately on every process creation.
+        // This covers: boot, app update (MY_PACKAGE_REPLACED), and process restarts after
+        // the OS killed the service due to memory pressure.
+        try {
+            CommandPollingService.start(this)
+        } catch (e: Exception) {
+            // ForegroundServiceStartNotAllowedException can occur on Android 12+ if the
+            // process was started in a restricted background state. WorkManager watchdog
+            // will recover within 15 minutes.
+            Log.w(TAG, "Could not start CommandPollingService from Application context: ${e.message}")
+        }
         CommandPollingWorker.schedule(this)
         LocationTrackingWorker.schedule(this)
     }

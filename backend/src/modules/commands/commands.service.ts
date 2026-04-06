@@ -11,6 +11,7 @@ import { Command, CommandStatus, CommandType } from './entities/command.entity';
 import { Device } from '../devices/entities/device.entity';
 import { Policy } from '../policies/entities/policy.entity';
 import { App } from '../apps/entities/app.entity';
+import { DeviceSession, DeviceSessionStatus } from '../device-sessions/entities/device-session.entity';
 
 export interface CreateCommandDto {
   deviceId: string;
@@ -43,6 +44,8 @@ export class CommandsService {
     private readonly policyRepository: Repository<Policy>,
     @InjectRepository(App)
     private readonly appRepository: Repository<App>,
+    @InjectRepository(DeviceSession)
+    private readonly deviceSessionRepository: Repository<DeviceSession>,
   ) {}
 
   async create(tenantId: string, dto: CreateCommandDto): Promise<Command> {
@@ -119,7 +122,7 @@ export class CommandsService {
   }
 
   /** Called by Android agent to fetch pending commands. Marks them as SENT atomically. */
-  async getPendingForDevice(deviceToken: string): Promise<Command[]> {
+  async getPendingForDevice(deviceToken: string, agentVersion?: string | null): Promise<Command[]> {
     const device = await this.deviceRepository
       .createQueryBuilder('device')
       .addSelect('device.deviceToken')
@@ -136,7 +139,9 @@ export class CommandsService {
     const now = new Date();
 
     // Update device heartbeat on every poll
-    await this.deviceRepository.update(device.id, { lastSeenAt: now, isOnline: true });
+    const heartbeat: Record<string, any> = { lastSeenAt: now, isOnline: true };
+    if (agentVersion) heartbeat.agentVersion = agentVersion;
+    await this.deviceRepository.update(device.id, heartbeat);
 
     if (pending.length > 0) {
       await this.commandRepository
@@ -183,9 +188,18 @@ export class CommandsService {
     // Sync device state fields when the relevant command is successfully executed
     if (dto.success) {
       if (command.type === CommandType.ENABLE_KIOSK) {
-        await this.deviceRepository.update(device.id, { isKioskMode: true });
+        const kioskApps: string[] = Array.isArray(command.payload?.apps) ? command.payload.apps : [];
+        await this.deviceRepository.update(device.id, { isKioskMode: true, kioskApps });
       } else if (command.type === CommandType.DISABLE_KIOSK) {
-        await this.deviceRepository.update(device.id, { isKioskMode: false });
+        await this.deviceRepository.update(device.id, { isKioskMode: false, kioskApps: [] });
+      } else if (command.type === CommandType.UPDATE_POLICY) {
+        // If auth was disabled, close all active sessions for this device
+        if (command.payload?.rules?.deviceUserAuthRequired === false) {
+          await this.deviceSessionRepository.update(
+            { deviceId: device.id, status: DeviceSessionStatus.ACTIVE },
+            { status: DeviceSessionStatus.CLOSED, endedAt: new Date(), endedReason: 'POLICY_AUTH_DISABLED' },
+          );
+        }
       }
     }
 

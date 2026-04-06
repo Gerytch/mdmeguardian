@@ -88,6 +88,9 @@ export class Device {
   @Column({ type: 'boolean', default: false })
   isOnline: boolean;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  agentVersion: string | null;
+
   @Column({ type: 'varchar', length: 512, nullable: true, select: false })
   deviceToken: string | null;
 

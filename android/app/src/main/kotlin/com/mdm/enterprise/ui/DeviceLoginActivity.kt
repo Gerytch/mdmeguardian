@@ -38,6 +38,8 @@ class DeviceLoginActivity : AppCompatActivity() {
         const val PREF_USER_NAME = "device_user_name"
         const val EXTRA_REASON = "reason"
 
+        @Volatile var isInForeground = false
+
         fun start(context: Context, reason: String? = null) {
             val intent = Intent(context, DeviceLoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -178,6 +180,25 @@ class DeviceLoginActivity : AppCompatActivity() {
                 Log.w(TAG, "Could not enter lock task: ${e.message}")
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isInForeground = true
+
+        // If auth was disabled while we were paused/hidden (broadcast missed), self-dismiss
+        val prefs = SecurePreferences.getInstance(this)
+        val authRequired = prefs.getString("device_user_auth_required", "true")?.toBoolean() ?: true
+        if (!authRequired) {
+            stopLockTask()
+            finish()
+            return
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isInForeground = false
     }
 
     @Deprecated("required override")

@@ -65,6 +65,11 @@ export default function DeviceDetailPage() {
   const [netTestWifi, setNetTestWifi]         = useState<any[]>([])
   const [netTestConnected, setNetTestConnected] = useState<any | null>(null)
 
+  // Update Agent modal state
+  const [showUpdateAgent, setShowUpdateAgent] = useState(false)
+  const [agentApkUrl, setAgentApkUrl]         = useState('')
+  const [agentVersion, setAgentVersion]       = useState('')
+
   // Kiosk / App Manager modal state
   const [showKiosk, setShowKiosk]         = useState(false)
   const [kioskEnabled, setKioskEnabled]   = useState(false)  // toggle inside modal
@@ -214,6 +219,10 @@ export default function DeviceDetailPage() {
       if (poll) clearInterval(poll)
       if (timeout) clearTimeout(timeout)
       setAppList(apps)
+      if (apps.length > 0 && device?.kioskApps?.length) {
+        const authorized = new Set(device.kioskApps)
+        setSelectedApps(new Set(apps.map(a => a.packageName).filter(p => authorized.has(p))))
+      }
       setFetchingApps(false)
     }
 
@@ -369,6 +378,7 @@ export default function DeviceDetailPage() {
               ['Fabricante', device.manufacturer || '—'],
               ['Modelo', device.model || '—'],
               ['Android', device.androidVersion || '—'],
+              ['Agente', device.agentVersion || '—'],
               ['IMEI', device.imei || '—'],
               ['Bateria', device.batteryLevel != null ? `${device.batteryLevel}%` : '—'],
               ['Status', device.status],
@@ -527,6 +537,15 @@ export default function DeviceDetailPage() {
                     {sending !== type && <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
                   </button>
                 ))}
+                {/* Atualizar Agente — requer URL do APK */}
+                <button
+                  onClick={() => setShowUpdateAgent(true)}
+                  disabled={!!sending}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50"
+                >
+                  <span>⬆️ Atualizar Agente</span>
+                  <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
               </div>
             </div>
 
@@ -827,6 +846,22 @@ export default function DeviceDetailPage() {
                           </label>
                         ))}
                     </div>
+
+                    {/* Warning: selected apps not installed on device */}
+                    {(() => {
+                      const installedPkgs = new Set(appList.map(a => a.packageName))
+                      const notInstalled = Array.from(selectedApps).filter(p => !installedPkgs.has(p))
+                      if (notInstalled.length === 0) return null
+                      return (
+                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+                          <p className="font-medium text-amber-800 mb-1">⚠️ {notInstalled.length} app{notInstalled.length > 1 ? 's' : ''} selecionado{notInstalled.length > 1 ? 's' : ''} não {notInstalled.length > 1 ? 'estão instalados' : 'está instalado'} neste dispositivo:</p>
+                          <ul className="text-amber-700 space-y-0.5 mb-2">
+                            {notInstalled.map(p => <li key={p} className="font-mono text-xs truncate">• {p}</li>)}
+                          </ul>
+                          <p className="text-amber-700 text-xs">O kiosk ficará pendente até estes apps serem instalados. Para instalação automática, adicione-os como <strong>Apps Obrigatórios</strong> na política do dispositivo.</p>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -862,6 +897,57 @@ export default function DeviceDetailPage() {
           </div>
         </div>
       )}
+      {/* ── Update Agent Modal ── */}
+      {showUpdateAgent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">⬆️ Atualizar Agente MDM</h3>
+              <p className="text-sm text-gray-500 mt-0.5">O dispositivo baixará e instalará o novo APK silenciosamente</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL do APK</label>
+                <input
+                  type="text"
+                  value={agentApkUrl}
+                  onChange={e => setAgentApkUrl(e.target.value)}
+                  placeholder="ex: /uploads/eguardian-v0.3.0.apk"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Versão</label>
+                <input
+                  type="text"
+                  value={agentVersion}
+                  onChange={e => setAgentVersion(e.target.value)}
+                  placeholder="ex: 0.3.0"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => { setShowUpdateAgent(false); setAgentApkUrl(''); setAgentVersion('') }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >Cancelar</button>
+              <button
+                onClick={async () => {
+                  setShowUpdateAgent(false)
+                  await sendCmd('UPDATE_AGENT', { apkUrl: agentApkUrl, version: agentVersion })
+                  setAgentApkUrl(''); setAgentVersion('')
+                }}
+                disabled={!!sending || !agentApkUrl.trim() || !agentVersion.trim()}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {sending === 'UPDATE_AGENT' ? 'Enviando...' : 'Enviar Atualização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Network Test Modal ── */}
       {showNetworkTest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

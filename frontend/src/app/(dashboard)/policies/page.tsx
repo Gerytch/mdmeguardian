@@ -1,9 +1,119 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { policiesApi, appsApi, devicesApi } from '@/lib/api'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { policiesApi, appsApi, devicesApi, commandsApi, deviceGroupsApi } from '@/lib/api'
 import { getTenantId } from '@/lib/auth'
 import { App, Policy, PolicyRules } from '@/types'
+
+// ─── Admin Lock shared config ────────────────────────────────────────────────
+const ADMIN_LOCK_TEMPLATES = [
+  'Leve este dispositivo ao setor de TI',
+  'Dispositivo em manutenção — entre em contato com o TI',
+  'Ativo em revisão de segurança — dirija-se à recepção do TI',
+  'Dispositivo bloqueado por política da empresa',
+  'Este dispositivo precisa de atualização obrigatória — leve ao TI',
+]
+type Severity = 'info' | 'warning' | 'critical'
+const severityConfig: Record<Severity, { label: string; color: string; bg: string }> = {
+  info:     { label: 'Info',     color: 'text-blue-700',  bg: 'bg-blue-50 border-blue-200' },
+  warning:  { label: 'Aviso',   color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+  critical: { label: 'Crítico', color: 'text-red-700',   bg: 'bg-red-50 border-red-200' },
+}
+
+// ─── Dispatch progress modal ─────────────────────────────────────────────────
+type CmdStatus = 'PENDING' | 'SENT' | 'EXECUTED' | 'FAILED'
+interface DispatchItem { deviceId: string; deviceName: string; isOnline: boolean; commandId: string; status: CmdStatus }
+
+function DispatchProgressModal({
+  title, subtitle, items, onClose, successLabel = 'Aplicado ✓',
+}: {
+  title: string
+  subtitle: string
+  items: DispatchItem[]
+  onClose: () => void
+  successLabel?: string
+}) {
+  const done   = items.filter(i => i.status === 'EXECUTED' || i.status === 'FAILED').length
+  const failed = items.filter(i => i.status === 'FAILED').length
+  const pct    = items.length > 0 ? Math.round((done / items.length) * 100) : 0
+  const allDone = done === items.length
+
+  const statusBadge = (s: CmdStatus, online: boolean) => {
+    if (!online && (s === 'PENDING' || s === 'SENT'))
+      return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">Offline</span>
+    if (s === 'EXECUTED') return <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">{successLabel}</span>
+    if (s === 'FAILED')   return <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Falhou ✗</span>
+    if (s === 'SENT')     return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Enviado…</span>
+    return <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Aguardando</span>
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-900">{title}</h3>
+              <p className="text-sm text-gray-500 mt-0.5 truncate max-w-xs">{subtitle}</p>
+            </div>
+            {allDone && (
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none ml-2">✕</button>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+              <span>{done}/{items.length} dispositivos</span>
+              <span className={allDone ? (failed > 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium') : 'text-gray-400'}>
+                {allDone ? (failed > 0 ? `${failed} falha(s)` : 'Concluído') : `${pct}%`}
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className={`h-2.5 rounded-full transition-all duration-500 ${failed > 0 && allDone ? 'bg-red-400' : allDone ? 'bg-green-500' : 'bg-primary-500'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Device list */}
+        <div className="px-6 py-4 max-h-64 overflow-y-auto space-y-2.5">
+          {items.map(item => (
+            <div key={item.deviceId} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${item.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="text-sm text-gray-800">{item.deviceName}</span>
+              </div>
+              {statusBadge(item.status, item.isOnline)}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 pt-3 border-t border-gray-100">
+          {allDone ? (
+            <button onClick={onClose} className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">
+              Fechar
+            </button>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-primary-400 animate-pulse" />
+                Verificando a cada 2s…
+              </p>
+              <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                Fechar (continua em fundo)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // App multi-select for required apps
 function AppMultiSelect({ label, hint, selectedIds, onChange, apps }: {
@@ -45,9 +155,6 @@ const DEFAULT_RULES: PolicyRules = {
   wifiOnly: false,
   locationTracking: false,
   trackingIntervalMinutes: 5,
-  passwordRequired: false,
-  minPasswordLength: 8,
-  maxFailedAttempts: 10,
   kioskMode: false,
   kioskModeType: 'whitelist',
   kioskApps: [],
@@ -193,6 +300,13 @@ export default function PoliciesPage() {
   const [error, setError] = useState('')
   const [appCatalog, setAppCatalog] = useState<App[]>([])
   const [devices, setDevices] = useState<any[]>([])
+  const [groups, setGroups] = useState<any[]>([])
+  const [commands, setCommands] = useState<any[]>([])
+  const [dispatch, setDispatch] = useState<{ title: string; subtitle: string; successLabel?: string; items: DispatchItem[] } | null>(null)
+  const [bulkLockPolicy, setBulkLockPolicy] = useState<Policy | null>(null)
+  const [bulkLockForm, setBulkLockForm] = useState({ message: 'Dispositivo solicitado para retornar à T.I.', contact: '', severity: 'warning' })
+  const [bulkLockSending, setBulkLockSending] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const tenantId = getTenantId()
   const set = (key: keyof FormState, value: any) => setForm(f => ({ ...f, [key]: value }))
@@ -200,10 +314,13 @@ export default function PoliciesPage() {
   const load = () => {
     if (!tenantId) return
     policiesApi.list(tenantId).then(r => setPolicies(r.data)).finally(() => setLoading(false))
-    appsApi.list(tenantId).then(r => setAppCatalog(r.data)).catch(() => {/* non-critical */})
-    devicesApi.list(tenantId).then(r => setDevices(r.data)).catch(() => {/* non-critical */})
+    appsApi.list(tenantId).then(r => setAppCatalog(r.data)).catch(() => {})
+    devicesApi.list(tenantId).then(r => setDevices(r.data)).catch(() => {})
+    deviceGroupsApi.list(tenantId).then(r => setGroups(r.data)).catch(() => {})
+    commandsApi.list(tenantId).then(r => setCommands(r.data)).catch(() => {})
   }
   useEffect(load, [])
+  useEffect(() => () => stopPolling(), [])
 
   const openCreate = () => {
     setEditPolicy(null)
@@ -225,9 +342,6 @@ export default function PoliciesPage() {
       wifiOnly: p.rules.wifiOnly,
       locationTracking: p.rules.locationTracking,
       trackingIntervalMinutes: p.rules.trackingIntervalMinutes,
-      passwordRequired: p.rules.passwordRequired,
-      minPasswordLength: p.rules.minPasswordLength ?? 8,
-      maxFailedAttempts: p.rules.maxFailedAttempts ?? 10,
       kioskMode: p.rules.kioskMode,
       kioskModeType: p.rules.kioskModeType ?? 'whitelist',
       kioskApps: [...p.rules.kioskApps],
@@ -253,9 +367,6 @@ export default function PoliciesPage() {
     wifiOnly: form.wifiOnly,
     locationTracking: form.locationTracking,
     trackingIntervalMinutes: form.trackingIntervalMinutes,
-    passwordRequired: form.passwordRequired,
-    minPasswordLength: form.passwordRequired ? form.minPasswordLength : undefined,
-    maxFailedAttempts: form.passwordRequired ? form.maxFailedAttempts : undefined,
     kioskMode: form.kioskMode,
     kioskModeType: form.kioskModeType as 'whitelist' | 'blacklist',
     kioskApps: form.kioskApps,
@@ -264,6 +375,10 @@ export default function PoliciesPage() {
     inactivityTimeoutMinutes: form.inactivityTimeoutMinutes,
   })
 
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -271,12 +386,53 @@ export default function PoliciesPage() {
     try {
       const payload = { name: form.name, description: form.description, isDefault: form.isDefault, requiredAppIds: form.requiredAppIds, rules: buildRules() }
       if (editPolicy) {
-        await policiesApi.update(tenantId, editPolicy.id, payload)
+        await policiesApi.update(tenantId!, editPolicy.id, payload)
+        closeModal()
+        load()
+
+        // Send UPDATE_POLICY to all devices assigned to this policy
+        const affected = devices.filter(d => d.policyId === editPolicy.id)
+        if (affected.length > 0) {
+          const cmdResults = await Promise.allSettled(
+            affected.map(d => devicesApi.sendCommand(tenantId!, d.id, 'UPDATE_POLICY', {}))
+          )
+          const items: DispatchItem[] = affected.map((d, i) => {
+            const r = cmdResults[i]
+            return {
+              deviceId: d.id,
+              deviceName: d.name,
+              isOnline: d.isOnline,
+              commandId: r.status === 'fulfilled' ? r.value.data.id : '',
+              status: r.status === 'fulfilled' ? 'PENDING' : 'FAILED',
+            }
+          })
+          setDispatch({ title: 'Aplicando política', subtitle: `"${form.name}"`, items })
+
+          // Poll every 2s to update command statuses
+          stopPolling()
+          pollRef.current = setInterval(async () => {
+            try {
+              const cmdList = await commandsApi.list(tenantId!)
+              const cmds: any[] = cmdList.data
+              setDispatch(prev => {
+                if (!prev) return null
+                const updated = prev.items.map(item => {
+                  if (!item.commandId) return item
+                  const found = cmds.find((c: any) => c.id === item.commandId)
+                  return found ? { ...item, status: found.status as CmdStatus } : item
+                })
+                const allDone = updated.every(i => i.status === 'EXECUTED' || i.status === 'FAILED')
+                if (allDone) { stopPolling(); commandsApi.list(tenantId!).then(r => setCommands(r.data)).catch(() => {}) }
+                return { ...prev, items: updated }
+              })
+            } catch { /* ignore */ }
+          }, 2000)
+        }
       } else {
-        await policiesApi.create(tenantId, payload)
+        await policiesApi.create(tenantId!, payload)
+        closeModal()
+        load()
       }
-      closeModal()
-      load()
     } catch (err: any) {
       const msg = err.response?.data?.message
       setError(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to save policy')
@@ -285,9 +441,96 @@ export default function PoliciesPage() {
     }
   }
 
+  const handleBulkLock = async () => {
+    if (!bulkLockPolicy || !tenantId) return
+    setBulkLockSending(true)
+    const affected = devices.filter(d => d.policyId === bulkLockPolicy.id)
+    const payload = { message: bulkLockForm.message, contact: bulkLockForm.contact, severity: bulkLockForm.severity }
+    const cmdResults = await Promise.allSettled(
+      affected.map(d => devicesApi.sendCommand(tenantId, d.id, 'ADMIN_LOCK', payload))
+    )
+    const items: DispatchItem[] = affected.map((d, i) => {
+      const r = cmdResults[i]
+      return {
+        deviceId: d.id, deviceName: d.name, isOnline: d.isOnline,
+        commandId: r.status === 'fulfilled' ? r.value.data.id : '',
+        status: r.status === 'fulfilled' ? 'PENDING' : 'FAILED',
+      }
+    })
+    setBulkLockPolicy(null)
+    setBulkLockSending(false)
+    commandsApi.list(tenantId).then(r => setCommands(r.data)).catch(() => {})
+    setDispatch({ title: 'Admin Lock em massa', subtitle: `Política: ${bulkLockPolicy.name} — ${affected.length} dispositivo(s)`, successLabel: 'Bloqueado ✓', items })
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const cmdList = await commandsApi.list(tenantId)
+        const cmds: any[] = cmdList.data
+        setCommands(cmds)
+        setDispatch(prev => {
+          if (!prev) return null
+          const updated = prev.items.map(item => {
+            if (!item.commandId) return item
+            const found = cmds.find((c: any) => c.id === item.commandId)
+            return found ? { ...item, status: found.status as CmdStatus } : item
+          })
+          const allDone = updated.every(i => i.status === 'EXECUTED' || i.status === 'FAILED')
+          if (allDone) stopPolling()
+          return { ...prev, items: updated }
+        })
+      } catch { /* ignore */ }
+    }, 2000)
+  }
+
+  const handleBulkUnlock = async (lockedDevices: any[], policyName: string) => {
+    if (!tenantId || lockedDevices.length === 0) return
+    const cmdResults = await Promise.allSettled(
+      lockedDevices.map(d => devicesApi.sendCommand(tenantId, d.id, 'ADMIN_UNLOCK', {}))
+    )
+    const items: DispatchItem[] = lockedDevices.map((d, i) => {
+      const r = cmdResults[i]
+      return {
+        deviceId: d.id, deviceName: d.name, isOnline: d.isOnline,
+        commandId: r.status === 'fulfilled' ? r.value.data.id : '',
+        status: r.status === 'fulfilled' ? 'PENDING' : 'FAILED',
+      }
+    })
+    commandsApi.list(tenantId).then(r => setCommands(r.data)).catch(() => {})
+    setDispatch({ title: 'Desbloqueando dispositivos', subtitle: `Política: ${policyName} — ${lockedDevices.length} dispositivo(s)`, successLabel: 'Desbloqueado ✓', items })
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const cmdList = await commandsApi.list(tenantId)
+        const cmds: any[] = cmdList.data
+        setCommands(cmds)
+        setDispatch(prev => {
+          if (!prev) return null
+          const updated = prev.items.map(item => {
+            if (!item.commandId) return item
+            const found = cmds.find((c: any) => c.id === item.commandId)
+            return found ? { ...item, status: found.status as CmdStatus } : item
+          })
+          const allDone = updated.every(i => i.status === 'EXECUTED' || i.status === 'FAILED')
+          if (allDone) stopPolling()
+          return { ...prev, items: updated }
+        })
+      } catch { /* ignore */ }
+    }, 2000)
+  }
+
   const deletePolicy = async (id: string) => {
     if (!tenantId || !confirm('Delete this policy?')) return
     try { await policiesApi.delete(tenantId, id); load() } catch {}
+  }
+
+  // Derive admin lock state per device from command history
+  const isDeviceLocked = (deviceId: string): boolean => {
+    const executed = commands.filter(c => c.deviceId === deviceId && c.status === 'EXECUTED')
+    const lastLock   = executed.filter(c => c.type === 'ADMIN_LOCK').sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+    const lastUnlock = executed.filter(c => c.type === 'ADMIN_UNLOCK').sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+    if (!lastLock) return false
+    if (!lastUnlock) return true
+    return new Date(lastLock.createdAt).getTime() > new Date(lastUnlock.createdAt).getTime()
   }
 
   const rulesDisplay = (rules: PolicyRules) => [
@@ -296,12 +539,114 @@ export default function PoliciesPage() {
     ['Screenshots', rules.screenshotBlocked],
     ['Wi-Fi Only', rules.wifiOnly],
     ['Location', rules.locationTracking],
-    ['Password', rules.passwordRequired],
     ['Kiosk', rules.kioskMode],
   ] as [string, boolean][]
 
   return (
     <div className="p-8">
+      {/* Bulk lock confirmation modal */}
+      {bulkLockPolicy && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">🔒 Admin Lock — Chamar para T.I.</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {devices.filter(d => d.policyId === bulkLockPolicy.id).length} dispositivo(s) da política "{bulkLockPolicy.name}" serão bloqueados. O usuário não consegue sair.
+              </p>
+            </div>
+            <div className="p-6 space-y-5">
+
+              {/* Severity */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Severidade</label>
+                <div className="flex gap-2">
+                  {(Object.entries(severityConfig) as [Severity, typeof severityConfig[Severity]][]).map(([key, cfg]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setBulkLockForm(f => ({ ...f, severity: key }))}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                        bulkLockForm.severity === key ? `${cfg.bg} ${cfg.color} border-current` : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {cfg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Message templates */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mensagem</label>
+                <div className="space-y-1 mb-2">
+                  {ADMIN_LOCK_TEMPLATES.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setBulkLockForm(f => ({ ...f, message: t }))}
+                      className={`w-full text-left text-sm px-3 py-2 rounded-lg border transition-all ${
+                        bulkLockForm.message === t ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-100 text-gray-600 hover:border-gray-200'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  rows={2}
+                  value={bulkLockForm.message}
+                  onChange={e => setBulkLockForm(f => ({ ...f, message: e.target.value }))}
+                  placeholder="Ou escreva uma mensagem personalizada..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              {/* Contact */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contato TI (opcional)</label>
+                <input
+                  type="text"
+                  value={bulkLockForm.contact}
+                  onChange={e => setBulkLockForm(f => ({ ...f, contact: e.target.value }))}
+                  placeholder="Ramal 2234 / ti@empresa.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setBulkLockPolicy(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={bulkLockSending || !bulkLockForm.message.trim()}
+                onClick={handleBulkLock}
+                className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {bulkLockSending
+                  ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Enviando…</>
+                  : `Bloquear ${devices.filter(d => d.policyId === bulkLockPolicy.id).length} dispositivo(s)`
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dispatch && (
+        <DispatchProgressModal
+          title={dispatch.title}
+          subtitle={dispatch.subtitle}
+          successLabel={dispatch.successLabel}
+          items={dispatch.items}
+          onClose={() => { stopPolling(); setDispatch(null) }}
+        />
+      )}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Políticas</h1>
@@ -358,17 +703,6 @@ export default function PoliciesPage() {
                 <NumberField label="Timeout de Tela (segundos)" hint="Bloqueio automático por inatividade" value={form.screenTimeoutSeconds!} min={15} max={3600} onChange={v => set('screenTimeoutSeconds', v)} />
               </Section>
 
-              {/* Password */}
-              <Section title="Senha">
-                <Toggle label="Exigir Senha" hint="Exige senha de bloqueio de tela" checked={form.passwordRequired} onChange={v => set('passwordRequired', v)} />
-                {form.passwordRequired && (
-                  <>
-                    <NumberField label="Tamanho Mínimo da Senha" min={4} max={32} value={form.minPasswordLength!} onChange={v => set('minPasswordLength', v)} />
-                    <NumberField label="Máx. Tentativas Falhas" hint="Apaga o dispositivo após N falhas" min={3} max={20} value={form.maxFailedAttempts!} onChange={v => set('maxFailedAttempts', v)} />
-                  </>
-                )}
-              </Section>
-
               {/* Location */}
               <Section title="Localização e Rastreamento">
                 <Toggle label="Ativar Rastreamento" hint="Rastreia a posição GPS do dispositivo" checked={form.locationTracking} onChange={v => set('locationTracking', v)} />
@@ -415,6 +749,27 @@ export default function PoliciesPage() {
                   </>
                 )}
               </Section>
+
+              {/* Warning: kiosk whitelist apps with APK not in requiredAppIds */}
+              {form.kioskMode && form.kioskModeType === 'whitelist' && (() => {
+                const requiredPkgs = new Set(
+                  appCatalog.filter(a => form.requiredAppIds.includes(a.id)).map(a => a.packageName)
+                )
+                const needsInstall = form.kioskApps.filter(pkg => {
+                  const catalogApp = appCatalog.find(a => a.packageName === pkg)
+                  return catalogApp?.apkUrl && !requiredPkgs.has(pkg)
+                })
+                if (needsInstall.length === 0) return null
+                return (
+                  <div className="mx-6 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+                    <p className="font-medium text-amber-800 mb-1">⚠️ {needsInstall.length} app{needsInstall.length > 1 ? 's' : ''} do kiosk precisa{needsInstall.length > 1 ? 'm' : ''} ser instalado{needsInstall.length > 1 ? 's' : ''} no dispositivo:</p>
+                    <ul className="text-amber-700 text-xs space-y-0.5 mb-2">
+                      {needsInstall.map(p => <li key={p} className="font-mono truncate">• {p}</li>)}
+                    </ul>
+                    <p className="text-amber-700 text-xs">Adicione {needsInstall.length > 1 ? 'esses apps' : 'esse app'} em <strong>Apps Obrigatórios</strong> abaixo para instalação automática ao aplicar a política.</p>
+                  </div>
+                )
+              })()}
 
               {/* Required Apps */}
               <Section title="Apps Obrigatórios">
@@ -488,7 +843,18 @@ export default function PoliciesPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => openEdit(policy)} className="text-gray-300 hover:text-primary-500 transition-colors">
+                  {devices.filter(d => d.policyId === policy.id).length > 0 && (
+                    <button
+                      onClick={() => { setBulkLockPolicy(policy); setBulkLockForm({ message: 'Dispositivo solicitado para retornar à T.I.', contact: '', severity: 'warning' }) }}
+                      title="Chamar todos os dispositivos para T.I. (Admin Lock em massa)"
+                      className="text-gray-300 hover:text-amber-500 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </button>
+                  )}
+                <button onClick={() => openEdit(policy)} className="text-gray-300 hover:text-primary-500 transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
@@ -527,6 +893,41 @@ export default function PoliciesPage() {
                 </div>
               )}
               <div className="mt-3 pt-3 border-t border-gray-50">
+                {/* Lock status summary */}
+                {(() => {
+                  const policyDevices = devices.filter(d => d.policyId === policy.id)
+                  const locked = policyDevices.filter(d => isDeviceLocked(d.id))
+                  if (policyDevices.length === 0) return null
+                  return locked.length > 0 ? (
+                    <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <span className="text-xs font-medium text-amber-700">{locked.length}/{policyDevices.length} em Admin Lock</span>
+                        <button
+                          onClick={() => handleBulkUnlock(locked, policy.name)}
+                          className="ml-auto text-xs px-2 py-0.5 bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 font-medium flex items-center gap-1 transition-colors"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                          </svg>
+                          Desbloquear todos
+                        </button>
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {locked.map(d => (
+                          <span key={d.id} title={d.name} className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium truncate max-w-[90px]">{d.name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                      <span className="text-xs text-green-600 font-medium">Todos desbloqueados</span>
+                    </div>
+                  )
+                })()}
                 <p className="text-xs text-gray-500 mb-2">
                   {devices.filter(d => d.policyId === policy.id).length} dispositivo(s) atribuído(s)
                 </p>
@@ -567,6 +968,55 @@ export default function PoliciesPage() {
                     </button>
                   </div>
                 ))}
+
+                {/* Groups section */}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5">Grupos</p>
+                  <select
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600"
+                    defaultValue=""
+                    onChange={async (e) => {
+                      const groupId = e.target.value
+                      if (!groupId) return
+                      e.target.value = ''
+                      const tid = getTenantId()!
+                      await deviceGroupsApi.assignPolicy(tid, groupId, policy.id)
+                      const g = await deviceGroupsApi.list(tid)
+                      setGroups(g.data)
+                      const d = await devicesApi.list(tid)
+                      setDevices(d.data)
+                    }}
+                  >
+                    <option value="">+ Atribuir a grupo...</option>
+                    {groups.filter(g => g.policyId !== policy.id).map(g => (
+                      <option key={g.id} value={g.id}>{g.name} ({g.deviceCount ?? 0} disp.)</option>
+                    ))}
+                  </select>
+                  {groups.filter(g => g.policyId === policy.id).map(g => (
+                    <div key={g.id} className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-gray-600 flex items-center gap-1">
+                        <svg className="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {g.name}
+                        <span className="text-gray-400">({g.deviceCount ?? 0})</span>
+                      </span>
+                      <button
+                        className="text-xs text-red-500 hover:text-red-700"
+                        onClick={async () => {
+                          const tid = getTenantId()!
+                          await deviceGroupsApi.removePolicy(tid, g.id)
+                          const updated = await deviceGroupsApi.list(tid)
+                          setGroups(updated.data)
+                          const d = await devicesApi.list(tid)
+                          setDevices(d.data)
+                        }}
+                      >
+                        remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ))}

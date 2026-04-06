@@ -92,3 +92,4 @@ backend/uploads/
 # =====================
 *.tmp
 *.bak
+scripts/.emu_tokens

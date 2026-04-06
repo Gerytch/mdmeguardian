@@ -14,12 +14,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
 
     <!-- Device Policy permissions -->
@@ -107,6 +109,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- Restarts MDM services after app self-update (OTA / adb install -r) -->
+        <receiver
+            android:name=".services.PackageReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Adds launcher shortcut after silent MDM app install -->
         <receiver
             android:name=".services.PackageInstalledReceiver"
@@ -130,17 +141,24 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- Real-time command polling foreground service -->
+        <!-- Real-time command polling foreground service.
+             foregroundServiceType="specialUse" avoids the Android 14+ 6-hour daily quota
+             that applies to dataSync. Device Owner MDM agents require persistent polling
+             to enforce security policies in real-time. -->
         <service
             android:name=".services.CommandPollingService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <meta-data
+                android:name="android.app.foreground_service.special_use_case"
+                android:value="MDM Device Owner agent: persistent command polling required to enforce security policies, apply configuration changes, and maintain device compliance in real-time." />
+        </service>
 
         <!-- User Activity Monitor Service -->
         <service
             android:name=".services.UserActivityMonitorService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse" />
 
         <!-- File Provider for APK installs -->
         <provider

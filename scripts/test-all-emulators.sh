@@ -24,6 +24,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# ── Java ─────────────────────────────────────────────────────────────────────
+export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-21.0.10.7-hotspot}"
+
 # ── Android SDK ──────────────────────────────────────────────────────────────
 SDK="$(cygpath "$LOCALAPPDATA")/Android/Sdk"
 EMULATOR="$SDK/emulator/emulator"
@@ -36,6 +39,7 @@ ADMIN_RECEIVER="$PACKAGE/com.mdm.enterprise.admin.MdmDeviceAdminReceiver"
 MAIN_ACTIVITY="$PACKAGE/com.mdm.enterprise.ui.MainActivity"
 API_URL="http://localhost:3001/api/v1"
 ANDROID_API_URL="http://10.0.2.2:3001/api/v1"
+TOKENS_FILE="$SCRIPT_DIR/.emu_tokens"  # cache de device_id + device_token por label
 
 # ── Emuladores (todos) ───────────────────────────────────────────────────────
 ALL_AVDS=("EGuardian_API25" "EGuardian_API32" "EGuardian_API34" "EGuardian_API36")
@@ -232,7 +236,9 @@ fi
 # ── --rebuild: rebuilda APK ───────────────────────────────────────────────────
 if [[ $OPT_REBUILD -eq 1 ]]; then
   log "Rebuilding APK..."
-  (cd "$PROJECT_ROOT/android" && ./gradlew assembleDebug)
+  GRADLEW="gradlew.bat"
+  [[ -f "$PROJECT_ROOT/android/gradlew" ]] && GRADLEW="gradlew"
+  (cd "$PROJECT_ROOT/android" && ./$GRADLEW assembleDebug)
   log "APK buildado com sucesso!"
   sep
 fi
@@ -249,18 +255,16 @@ if [[ $OPT_ONLY_EMULATORS -eq 0 ]]; then
     log "Backend já rodando em :3001 — pulando"
   else
     log "Subindo Backend (NestJS :3001)..."
-    BACKEND_WIN="$(cygpath -w "$PROJECT_ROOT/backend")"
-    cmd //c start "Backend - NestJS :3001" cmd /k \
-      "cd /d \"$BACKEND_WIN\" && node dist/main.js || (npx nest build && node dist/main.js)"
+    (cd "$PROJECT_ROOT/backend" && node dist/main.js > /tmp/eguardian_backend.log 2>&1) &
+    log "Backend iniciado em background — log: /tmp/eguardian_backend.log"
   fi
 
   if curl -s --max-time 3 -o /dev/null "http://localhost:3000" > /dev/null 2>&1; then
     log "Frontend já rodando em :3000 — pulando"
   else
     log "Subindo Frontend (Next.js :3000)..."
-    FRONTEND_WIN="$(cygpath -w "$PROJECT_ROOT/frontend")"
-    cmd //c start "Frontend - Next.js :3000" cmd /k \
-      "cd /d \"$FRONTEND_WIN\" && npm run dev"
+    (cd "$PROJECT_ROOT/frontend" && npm run dev > /tmp/eguardian_frontend.log 2>&1) &
+    log "Frontend iniciado em background — log: /tmp/eguardian_frontend.log"
   fi
 
   log "Aguardando backend..."
@@ -318,6 +322,9 @@ if [[ $OPT_NO_ENROLL -eq 0 ]]; then
 
     if [[ -n "${DEVICE_TOKENS[$i]:-}" && -n "${DEVICE_IDS[$i]:-}" ]]; then
       log "$LABEL → ID: ${DEVICE_IDS[$i]:0:18}... | Token: ${DEVICE_TOKENS[$i]:0:16}..."
+      # Salva no cache para reutilizar em --no-enroll futuro
+      grep -v "^$LABEL " "$TOKENS_FILE" 2>/dev/null > "${TOKENS_FILE}.tmp" && mv "${TOKENS_FILE}.tmp" "$TOKENS_FILE" || true
+      echo "$LABEL ${DEVICE_IDS[$i]} ${DEVICE_TOKENS[$i]} $TENANT_ID" >> "$TOKENS_FILE"
     else
       warn "$LABEL: enrollment incompleto — $ENROLL_RESP"
     fi
@@ -325,17 +332,45 @@ if [[ $OPT_NO_ENROLL -eq 0 ]]; then
   sep
 fi
 
+# ── Se --no-enroll, carrega tokens do cache para re-linkar sem criar novos devices ──
+if [[ $OPT_NO_ENROLL -eq 1 && -f "$TOKENS_FILE" ]]; then
+  log "Carregando tokens do cache ($TOKENS_FILE)..."
+  declare -a DEVICE_TOKENS DEVICE_IDS
+  TENANT_ID=""
+  for i in "${!AVDS[@]}"; do
+    LABEL="${LABELS[$i]}"
+    LINE=$(grep "^$LABEL " "$TOKENS_FILE" 2>/dev/null | tail -1)
+    if [[ -n "$LINE" ]]; then
+      DEVICE_IDS[$i]=$(echo "$LINE"    | awk '{print $2}')
+      DEVICE_TOKENS[$i]=$(echo "$LINE" | awk '{print $3}')
+      [[ -z "$TENANT_ID" ]] && TENANT_ID=$(echo "$LINE" | awk '{print $4}')
+      log "  $LABEL → ID: ${DEVICE_IDS[$i]:0:18}... (cache)"
+    else
+      warn "  $LABEL → sem cache — enrollment será pulado"
+    fi
+  done
+  [[ -z "$TENANT_ID" ]] && TENANT_ID=""
+  sep
+fi
+
 # ── Inicia emuladores ─────────────────────────────────────────────────────────
 log "Iniciando ${#AVDS[@]} emulador(es) em paralelo..."
-EMU_EXTRA_FLAGS="-memory 2048 -cores 2 -gpu auto"
+EMU_EXTRA_FLAGS="-memory 2048 -cores 2"
 [[ $OPT_WIPE -eq 1 ]] && EMU_EXTRA_FLAGS="$EMU_EXTRA_FLAGS -wipe-data"
 
 for i in "${!AVDS[@]}"; do
   AVD="${AVDS[$i]}"; PORT="${PORTS[$i]}"; LABEL="${LABELS[$i]}"
-  log "  → $AVD (porta $PORT)"
+  # API25 suporta Vulkan; API32+ crasham com gpu auto (Vulkan+RTSS) — usar swiftshader
+  # Se API25 travar na tela de loading, use --wipe para resetar o userdata
+  if [[ "$LABEL" == "API25" ]]; then
+    GPU_FLAG="-gpu auto"
+  else
+    GPU_FLAG="-gpu swiftshader_indirect"
+  fi
+  log "  → $AVD (porta $PORT, $GPU_FLAG)"
   # shellcheck disable=SC2086
   "$EMULATOR" -avd "$AVD" -no-snapshot-load -port "$PORT" \
-    $EMU_EXTRA_FLAGS > "/tmp/emu_${LABEL}.log" 2>&1 &
+    $EMU_EXTRA_FLAGS $GPU_FLAG > "/tmp/emu_${LABEL}.log" 2>&1 &
 done
 log "Emuladores iniciando em background..."
 sep
@@ -378,8 +413,12 @@ setup_emulator() {
       || echo "[$LABEL] Device Owner: $DPM_OUT"
   fi
 
-  if [[ $OPT_NO_ENROLL -eq 0 && -n "$DEVICE_TOKEN" && -n "$DEVICE_ID" ]]; then
-    echo "[$LABEL] Enrollando via ADB..."
+  if [[ -n "$DEVICE_TOKEN" && -n "$DEVICE_ID" ]]; then
+    if [[ $OPT_NO_ENROLL -eq 1 ]]; then
+      echo "[$LABEL] Re-linkando device (cache) via ADB..."
+    else
+      echo "[$LABEL] Enrollando via ADB..."
+    fi
     "$ADB" -s "$SERIAL" shell am start \
       -n "$MAIN_ACTIVITY" \
       -a "com.mdm.enterprise.DEV_ENROLL" \
@@ -388,11 +427,9 @@ setup_emulator() {
       --es dev_tenant_id    "$TENANT_REF" \
       --es dev_server_url   "$ANDROID_API_URL" \
       > /dev/null 2>&1
-    echo "[$LABEL] Enrollment enviado!"
-  elif [[ $OPT_NO_ENROLL -eq 1 ]]; then
-    echo "[$LABEL] Enrollment pulado (--no-enroll)"
+    echo "[$LABEL] Enrollment/re-link enviado!"
   else
-    echo "[$LABEL] AVISO: sem token — enrollment pulado"
+    echo "[$LABEL] AVISO: sem token — enrollment pulado (rode sem --no-enroll para criar devices)"
   fi
 
   echo "[$LABEL] Setup concluído!"

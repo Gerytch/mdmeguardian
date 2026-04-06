@@ -29,8 +29,9 @@ class LocationTrackingWorker(
         const val WORK_NAME = "mdm_location_tracking"
 
         fun schedule(context: Context, intervalMinutes: Long = 5) {
+            val clampedInterval = intervalMinutes.coerceAtLeast(15) // WorkManager minimum is 15 min
             val request = PeriodicWorkRequestBuilder<LocationTrackingWorker>(
-                intervalMinutes, TimeUnit.MINUTES,
+                clampedInterval, TimeUnit.MINUTES,
                 1, TimeUnit.MINUTES,
             )
                 .setConstraints(
@@ -40,11 +41,16 @@ class LocationTrackingWorker(
                 )
                 .build()
 
+            // REPLACE so a change in trackingIntervalMinutes takes effect immediately
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.REPLACE,
                 request,
             )
+        }
+
+        fun cancel(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
 
         fun scheduleImmediate(context: Context) {
@@ -63,7 +69,6 @@ class LocationTrackingWorker(
     private val prefs = SecurePreferences.getInstance(applicationContext)
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val jwtToken = prefs.getStr("jwt_token") ?: return@withContext Result.failure()
         val tenantId = prefs.getStr("tenant_id") ?: return@withContext Result.failure()
         val deviceId = prefs.getStr("device_id") ?: return@withContext Result.failure()
 
@@ -92,7 +97,6 @@ class LocationTrackingWorker(
             }
 
             api.postLocation(
-                "Bearer $jwtToken",
                 tenantId,
                 LocationRequest(
                     deviceId = deviceId,

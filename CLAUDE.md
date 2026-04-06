@@ -136,6 +136,21 @@ O E.Guardian precisa ser Device Owner para:
 - **Kiosk section**: botão único abre modal com toggle (on/off), quando ON mostra configurações
 - `execRef` cleanup está em `useEffect([], [])` separado — NÃO dentro do effect de commands
 
+### Dashboard KPI (`frontend/src/app/(dashboard)/dashboard/KpiCards.tsx`)
+- `DateFilterBar`: presets (Hoje, 7d, 30d, Mês atual) + custom range — filtra `filteredSessions` e `filteredCommands`
+- `PeakConcurrentCard`: sweep-line para máximo de sessões simultâneas
+- `PeakHourCard`: click na barra abre modal com usuários daquela hora + tempo total de sessão
+- Cores das barras: `bg-primary-100` (não `bg-primary-200`, que não existe na config Tailwind)
+- Layout segunda linha: `lg:grid-cols-5`
+
+### Página de Políticas (`frontend/src/app/(dashboard)/policies/page.tsx`)
+- **DispatchProgressModal**: genérico com props `title`, `subtitle`, `successLabel`; usado para UPDATE_POLICY e Admin Lock
+- **Bulk Admin Lock ("Chamar para T.I.")**: ícone de cadeado no card da política → modal com templates/severity/mensagem/contato → envia `ADMIN_LOCK` a todos os devices
+- **handleBulkUnlock**: envia `ADMIN_UNLOCK` aos devices em lock → mesmo popup de progresso
+- **Banner de status**: âmbar "X/Y em Admin Lock" com botão "Desbloquear todos"; verde "Todos desbloqueados"
+- **`isDeviceLocked(deviceId)`**: deriva estado de lock do histórico de comandos (último ADMIN_LOCK vs ADMIN_UNLOCK por `createdAt`)
+- `commands` refreshado imediatamente após envio + a cada tick de polling (sem necessitar F5)
+
 ---
 
 ## Bugs Conhecidos e Corrigidos
@@ -153,6 +168,24 @@ O E.Guardian precisa ser Device Owner para:
 | Crash API 25 ao aplicar policy com USB bloqueado | `setUsbDataSignalingEnabled()` é API 31+ — lança `NoSuchMethodError` (não pego por `catch Exception`) | Guard `Build.VERSION.SDK_INT >= S` em `blockUSBDataTransfer()` |
 | Listagem de device-users retornava 500 | `ValidationPipe` com `enableImplicitConversion` converte `@Query` ausente para `NaN`; `NaN ?? 1 = NaN` | Troca `??` por `\|\|` no `findAll` (page/limit defaults) |
 | Mesmo usuário logado em 2 dispositivos simultaneamente | `closeActiveForDevice` fechava só sessão do device atual, não do user | `closeActiveForUser` fecha todas sessões do user; `validateSession` (GET 410) + re-login com toast no Android |
+| Kiosk re-ativação escondia todos os apps | `queryIntentActivities(intent, 0)` não enxerga apps ocultos por `setApplicationHidden()` | Corrigido com `MATCH_UNINSTALLED_PACKAGES` em `MdmPolicyService.enableKioskMode` |
+| `kioskApps` não persistia no banco | `acknowledgeCommand` só salvava `isKioskMode=true`, sem salvar a lista | Adicionado `kioskApps` no update do `ENABLE_KIOSK`; limpo no `DISABLE_KIOSK` |
+| Checkboxes desmarcados ao reabrir modal kiosk | Frontend não pré-selecionava `device.kioskApps` ao exibir lista | `fetchApps` faz interseção com `device.kioskApps` ao receber lista do device |
+| Versão do agente não visível | Nenhum campo rastreava a versão do APK instalado nos devices | Header `X-Agent-Version` enviado em todo poll; salvo em `devices.agentVersion`; exibido no frontend |
+| Kiosk com app não instalado causava tela preta | `setApplicationHidden()` escondia todos os apps quando nenhum da whitelist estava instalado | Guard em `enableKioskMode`: `selected.isEmpty() && mode == "whitelist" → abort` |
+| Loop infinito de lockNow no watchdog de sessão | Watchdog chamava `lockNow()` a cada 2s sem conseguir mostrar DeviceLoginActivity, causando tela preta permanente | Flag `lockFired`: lockNow só na primeira vez; chamadas seguintes só atualizam notificação |
+| DeviceLoginActivity não aparecia no Android 14 após lockNow | `USE_FULL_SCREEN_INTENT` restrito no Android 14 — full-screen notification não lançava a activity | Substituído por wake lock + `setKeyguardDisabled(true)` + `startActivity()` + re-enable após 3s (Device Owner) |
+| Kiosk pendente não se auto-aplicava após instalação de app | `enableKioskMode` abortava silenciosamente; app nunca era instalado pois `requiredApps` estava vazio | Kiosk salvo como pendente em SharedPrefs; `applyPendingKioskIfReady()` chamado a cada poll (5s) aplica quando app instalado |
+| Admin lock watchdog não funcionava no Android 14+ (API 36) | `setFullScreenIntent` bloqueado no Android 14 sem permissão `USE_FULL_SCREEN_INTENT` | Device Owner path: wake lock + `setKeyguardDisabled(true)` + `startActivity()` + re-enable após 3s em `postAdminLockAlert` |
+| Crash do app liberava admin lock | `onStartCommand` não verificava estado de lock ao reiniciar após crash | `onStartCommand` chama `postAdminLockAlert(forceStart=true)` imediatamente se lock ativo mas não em foreground |
+| Crash API 25 em `getNotificationChannel()` | Método é API 26+ (`Build.VERSION_CODES.O`); chamado sem guard de versão | Guard `Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&` antes de `nm.getNotificationChannel()` em `postLoginRequiredAlert` e `postAdminLockAlert` |
+| Device-sessions endpoint retornava 500 com `?limit=500` | `ValidationPipe enableImplicitConversion` converte `@Query` ausente para `NaN`; `NaN ?? 1 = NaN` | Troca `??` por `\|\|` em `device-sessions.service.ts` (mesma fix aplicada antes em device-users) |
+| Barras do gráfico "Pico de uso por hora" invisíveis | Cor `bg-primary-200` não definida na config Tailwind JIT | Corrigido para `bg-primary-100` em `KpiCards.tsx` |
+| Status de lock não atualizava sem F5 na página de políticas | `commands` state só era refreshado ao `allDone` | `commandsApi.list` chamado imediatamente após envio + `setCommands(cmds)` em cada tick de polling |
+| Device transferido para política lockada não recebia o lock | Fix inicial estava em `DevicesService.update()` mas o frontend usa `policiesApi.assign` e `deviceGroupsApi.addDevice` — endpoints diferentes | `syncAdminLockForNewDevice()` em `PoliciesService.assignToDevice()` e `DeviceGroupsService.addDevice()`: bidirecional — nova política lockada → `ADMIN_LOCK`; nova política unlocked mas device lockado → `ADMIN_UNLOCK` |
+| Device transferido de política lock para unlock permanecia lockado | `syncAdminLockForNewDevice()` só tratava o sentido lock→lock | Mesmo método agora verifica se o device em si está lockado (`deviceLastLock > deviceLastUnlock`) e envia `ADMIN_UNLOCK` se a nova política não está lockada |
+| GPS não aparecia no mapa após ativar rastreamento na política | `LocationTrackingWorker` falhava antes de chamar a API por checar `jwt_token` (nunca salvo no device); `applyPolicy()` nunca iniciava o worker ao aplicar a política | Removido `jwt_token` do worker (endpoint é `@Public()`); adicionado bloco location tracking em `applyPolicy()` que agenda o worker + dispara fix imediato |
+| `UPDATE_POLICY` não chegava em API34/36 sem abrir o app | `foregroundServiceType="dataSync"` tem quota de 6h/dia no Android 14+ — OS matava o `CommandPollingService` silenciosamente após a quota | Trocado para `specialUse` (sem quota); `CommandPollingService.start()` adicionado ao `MdmApplication.onCreate()`; `CommandPollingWorker` virou watchdog que reinicia o serviço a cada 15 min |
 
 ---
 

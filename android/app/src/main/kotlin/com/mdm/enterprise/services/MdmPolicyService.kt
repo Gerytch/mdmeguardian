@@ -16,6 +16,8 @@ class MdmPolicyService(private val context: Context) {
     companion object {
         private const val TAG = "MdmPolicyService"
         private const val PREF_HIDDEN_APPS = "kiosk_hidden_apps"
+        private const val PREF_PENDING_KIOSK_APPS = "pending_kiosk_apps"
+        private const val PREF_PENDING_KIOSK_MODE = "pending_kiosk_mode"
     }
 
     private val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
@@ -46,6 +48,17 @@ class MdmPolicyService(private val context: Context) {
             blockUSBDataTransfer(rules.usbBlocked)
         }
 
+        // Location tracking
+        if (rules.locationTracking) {
+            val intervalMinutes = rules.trackingIntervalMinutes.toLong().coerceAtLeast(1)
+            Log.i(TAG, "Location tracking enabled — interval: ${intervalMinutes}min")
+            LocationTrackingWorker.schedule(context, intervalMinutes)
+            LocationTrackingWorker.scheduleImmediate(context) // send first fix right away
+        } else {
+            Log.i(TAG, "Location tracking disabled — cancelling worker")
+            LocationTrackingWorker.cancel(context)
+        }
+
         Log.i(TAG, "Policy applied successfully")
     }
 
@@ -73,13 +86,25 @@ class MdmPolicyService(private val context: Context) {
         val pm = context.packageManager
         val launchIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null)
             .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        val allApps = pm.queryIntentActivities(launchIntent, 0)
+        val allApps = pm.queryIntentActivities(launchIntent, android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES)
             .mapNotNull { it.activityInfo?.packageName }
             .filter { it != context.packageName }  // MDM agent never hidden
             .toSet()
 
         // MDM package is always exempt — never goes into toHide
-        val selected = packages.toSet() - context.packageName
+        // Intersect with allApps so uninstalled packages don't cause empty whitelist → all hidden
+        val selected = (packages.toSet() - context.packageName).intersect(allApps)
+        if (selected.isEmpty() && mode == "whitelist") {
+            Log.w(TAG, "Kiosk whitelist: no valid installed apps — saving as pending (apps: $packages)")
+            prefs.edit()
+                .putStringSet(PREF_PENDING_KIOSK_APPS, packages.toSet())
+                .putString(PREF_PENDING_KIOSK_MODE, mode)
+                .apply()
+            return
+        }
+
+        // Apps are installed — clear any pending config and proceed
+        prefs.edit().remove(PREF_PENDING_KIOSK_APPS).remove(PREF_PENDING_KIOSK_MODE).apply()
         val toHide = if (mode == "blacklist") {
             selected                             // blacklist: hide only the selected ones
         } else {
@@ -298,6 +323,28 @@ class MdmPolicyService(private val context: Context) {
             .build()
         nm.notify(System.currentTimeMillis().toInt(), notif)
         Log.i(TAG, "Message sent: $title")
+    }
+
+    /**
+     * Called every poll cycle. If a kiosk was deferred because required apps weren't
+     * installed yet, checks whether they are installed now and applies kiosk automatically.
+     */
+    fun applyPendingKioskIfReady() {
+        val pendingApps = prefs.getStringSet(PREF_PENDING_KIOSK_APPS, null) ?: return
+        val mode = prefs.getString(PREF_PENDING_KIOSK_MODE, "whitelist") ?: "whitelist"
+
+        val pm = context.packageManager
+        val installedPackages = pm.getInstalledApplications(0).map { it.packageName }.toSet()
+        val missing = pendingApps.filter { it != context.packageName && it !in installedPackages }
+
+        if (missing.isNotEmpty()) {
+            Log.d(TAG, "Pending kiosk: still waiting for ${missing.size} app(s): $missing")
+            return
+        }
+
+        Log.i(TAG, "Pending kiosk: all apps now installed — applying kiosk ($mode, apps=$pendingApps)")
+        prefs.edit().remove(PREF_PENDING_KIOSK_APPS).remove(PREF_PENDING_KIOSK_MODE).apply()
+        enableKioskMode(pendingApps.toList(), mode)
     }
 
     fun reboot() {

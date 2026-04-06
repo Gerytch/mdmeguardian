@@ -1,11 +1,13 @@
 import {
   Controller,
   Get,
+  Delete,
   Param,
   Query,
   ParseUUIDPipe,
   Header,
   Res,
+  HttpCode,
 } from '@nestjs/common'
 import { Response } from 'express'
 import { DeviceSessionsService } from './device-sessions.service'
@@ -27,6 +29,15 @@ export class DeviceSessionsController {
     @Query('limit') limit?: number,
   ) {
     return this.deviceSessionsService.findAll(tenantId, { deviceId, deviceUserId, status, from, to, page, limit })
+  }
+
+  @Delete(':sessionId')
+  @HttpCode(204)
+  async closeSession(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.deviceSessionsService.closeById(tenantId, sessionId)
   }
 
   @Get('export')

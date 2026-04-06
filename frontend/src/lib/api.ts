@@ -58,6 +58,10 @@ export const devicesApi = {
   commands: (tenantId: string, deviceId: string) => api.get(`/tenants/${tenantId}/commands?deviceId=${deviceId}`),
   sendCommand: (tenantId: string, deviceId: string, type: string, payload?: any) =>
     api.post(`/tenants/${tenantId}/commands`, { deviceId, type, payload: payload || {} }),
+  generateEnrollmentToken: (tenantId: string, policyId?: string) =>
+    api.post<{ token: string; expiresAt: string; qrPayload: string }>(
+      `/tenants/${tenantId}/devices/enrollment-token${policyId ? `?policyId=${policyId}` : ''}`,
+    ),
 }
 
 export const policiesApi = {
@@ -111,6 +115,8 @@ export const deviceSessionsApi = {
     api.get(`/tenants/${tenantId}/device-sessions`, { params }),
   exportCsv: (tenantId: string, params?: any) =>
     api.get(`/tenants/${tenantId}/device-sessions/export`, { params, responseType: 'blob' }),
+  close: (tenantId: string, sessionId: string) =>
+    api.delete(`/tenants/${tenantId}/device-sessions/${sessionId}`),
 }
 
 export const deviceGroupsApi = {

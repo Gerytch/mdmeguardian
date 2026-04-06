@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { DeviceGroup } from './entities/device-group.entity';
 import { Device } from '../devices/entities/device.entity';
 import { Command, CommandStatus, CommandType } from '../commands/entities/command.entity';
@@ -173,11 +173,85 @@ export class DeviceGroupsService {
             createdBy: 'system',
           }),
         );
+
+        // If the target policy is currently in admin lock, lock the newly added device too
+        await this.syncAdminLockForNewDevice(tenantId, policy.id, device.id);
         return;
       }
     }
 
     await this.deviceRepo.save(device);
+  }
+
+  /** Sync admin lock state when a device is added to a group with a policy.
+   *  - New policy locked → send ADMIN_LOCK with same payload
+   *  - New policy unlocked but device is locked → send ADMIN_UNLOCK */
+  private async syncAdminLockForNewDevice(
+    tenantId: string,
+    policyId: string,
+    deviceId: string,
+  ): Promise<void> {
+    // Determine new policy lock state from peers
+    const peers = await this.deviceRepo.find({
+      where: { tenantId, policyId },
+      select: ['id'],
+    });
+    const peerIds = peers.map((d) => d.id).filter((pid) => pid !== deviceId);
+
+    let newPolicyIsLocked = false;
+    let lockPayload: Record<string, any> = {};
+
+    if (peerIds.length > 0) {
+      const peerLastLock = await this.commandRepo.findOne({
+        where: { deviceId: In(peerIds), type: CommandType.ADMIN_LOCK },
+        order: { createdAt: 'DESC' },
+      });
+      if (peerLastLock) {
+        const peerLastUnlock = await this.commandRepo.findOne({
+          where: { deviceId: In(peerIds), type: CommandType.ADMIN_UNLOCK },
+          order: { createdAt: 'DESC' },
+        });
+        newPolicyIsLocked = !peerLastUnlock || peerLastLock.createdAt > peerLastUnlock.createdAt;
+        lockPayload = peerLastLock.payload;
+      }
+    }
+
+    if (newPolicyIsLocked) {
+      await this.commandRepo.save(
+        this.commandRepo.create({
+          tenantId, deviceId,
+          type: CommandType.ADMIN_LOCK,
+          payload: lockPayload,
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }),
+      );
+      return;
+    }
+
+    // New policy is not locked — unlock the device if it's currently locked
+    const deviceLastLock = await this.commandRepo.findOne({
+      where: { deviceId, type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (!deviceLastLock) return;
+
+    const deviceLastUnlock = await this.commandRepo.findOne({
+      where: { deviceId, type: CommandType.ADMIN_UNLOCK },
+      order: { createdAt: 'DESC' },
+    });
+    const deviceIsLocked = !deviceLastUnlock || deviceLastLock.createdAt > deviceLastUnlock.createdAt;
+    if (!deviceIsLocked) return;
+
+    await this.commandRepo.save(
+      this.commandRepo.create({
+        tenantId, deviceId,
+        type: CommandType.ADMIN_UNLOCK,
+        payload: {},
+        status: CommandStatus.PENDING,
+        createdBy: 'system',
+      }),
+    );
   }
 
   async removeDevice(
@@ -190,7 +264,49 @@ export class DeviceGroupsService {
     });
     if (!device) throw new NotFoundException(`Device "${deviceId}" not found in group "${groupId}"`);
 
+    const hadPolicy = !!device.policyId;
     device.groupId = null;
+    device.policyId = null;
     await this.deviceRepo.save(device);
+
+    // If the device had a policy, reset its rules and unlock if needed
+    if (hadPolicy) {
+      await this.clearPolicyForDevice(tenantId, deviceId);
+    }
+  }
+
+  /** Send ADMIN_UNLOCK (if locked) + UPDATE_POLICY with empty rules when a device loses its policy. */
+  private async clearPolicyForDevice(tenantId: string, deviceId: string): Promise<void> {
+    const commands: any[] = [];
+
+    const lastLock = await this.commandRepo.findOne({
+      where: { deviceId, type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (lastLock) {
+      const lastUnlock = await this.commandRepo.findOne({
+        where: { deviceId, type: CommandType.ADMIN_UNLOCK },
+        order: { createdAt: 'DESC' },
+      });
+      if (!lastUnlock || lastLock.createdAt > lastUnlock.createdAt) {
+        commands.push(this.commandRepo.create({
+          tenantId, deviceId,
+          type: CommandType.ADMIN_UNLOCK,
+          payload: {},
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }));
+      }
+    }
+
+    commands.push(this.commandRepo.create({
+      tenantId, deviceId,
+      type: CommandType.UPDATE_POLICY,
+      payload: { policyId: null, rules: {} },
+      status: CommandStatus.PENDING,
+      createdBy: 'system',
+    }));
+
+    await this.commandRepo.save(commands);
   }
 }

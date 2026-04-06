@@ -6,7 +6,7 @@ import {
   GoneException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import * as crypto from 'crypto';
 import { Device, DeviceStatus } from './entities/device.entity';
 import { EnrollmentToken } from './entities/enrollment-token.entity';
@@ -82,6 +82,8 @@ export class DevicesService {
 
   async update(tenantId: string, id: string, dto: UpdateDeviceDto): Promise<Device> {
     const device = await this.findOne(tenantId, id);
+    const oldPolicyId = device.policyId;
+
     if (dto.name !== undefined) device.name = dto.name;
     if (dto.status !== undefined) device.status = dto.status;
     if (dto.policyId !== undefined) device.policyId = dto.policyId;
@@ -89,7 +91,64 @@ export class DevicesService {
     if (dto.isKioskMode !== undefined) device.isKioskMode = dto.isKioskMode;
     if (dto.kioskApps !== undefined) device.kioskApps = dto.kioskApps;
     if (dto.osVersion !== undefined) device.osVersion = dto.osVersion;
-    return this.deviceRepository.save(device);
+    const saved = await this.deviceRepository.save(device);
+
+    // Sync admin lock state when device is moved to a different policy
+    if (dto.policyId !== undefined && dto.policyId !== oldPolicyId) {
+      await this.syncAdminLockOnPolicyChange(tenantId, id, dto.policyId ?? null);
+    }
+
+    return saved;
+  }
+
+  /** When a device is reassigned to another policy, auto-lock or auto-unlock it
+   *  to match the current lock state of its new peers. */
+  private async syncAdminLockOnPolicyChange(
+    tenantId: string,
+    deviceId: string,
+    newPolicyId: string | null,
+  ): Promise<void> {
+    if (!newPolicyId) {
+      // Device removed from policy — reset all rules and unlock if needed
+      await this.clearPolicyForDevice(tenantId, deviceId);
+      return;
+    }
+
+    // Find peers already in the target policy (excluding this device)
+    const peers = await this.deviceRepository.find({
+      where: { tenantId, policyId: newPolicyId },
+      select: ['id'],
+    });
+    const peerIds = peers.map((d) => d.id).filter((pid) => pid !== deviceId);
+    if (peerIds.length === 0) return;
+
+    // Most recent ADMIN_LOCK among peers
+    const lastLock = await this.commandRepository.findOne({
+      where: { deviceId: In(peerIds), type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (!lastLock) return; // policy was never locked
+
+    // Most recent ADMIN_UNLOCK among peers
+    const lastUnlock = await this.commandRepository.findOne({
+      where: { deviceId: In(peerIds), type: CommandType.ADMIN_UNLOCK },
+      order: { createdAt: 'DESC' },
+    });
+
+    const policyIsLocked = !lastUnlock || lastLock.createdAt > lastUnlock.createdAt;
+    if (!policyIsLocked) return;
+
+    // Send ADMIN_LOCK to the newly moved device using the same payload
+    await this.commandRepository.save(
+      this.commandRepository.create({
+        tenantId,
+        deviceId,
+        type: CommandType.ADMIN_LOCK,
+        payload: lastLock.payload,
+        status: CommandStatus.PENDING,
+        createdBy: 'system',
+      }),
+    );
   }
 
   async heartbeat(tenantId: string, id: string, dto: DeviceHeartbeatDto): Promise<Device> {
@@ -173,6 +232,43 @@ export class DevicesService {
   async remove(tenantId: string, id: string): Promise<void> {
     const device = await this.findOne(tenantId, id);
     await this.deviceRepository.remove(device);
+  }
+
+  /** Send ADMIN_UNLOCK (if locked) + UPDATE_POLICY with empty rules when a device loses its policy. */
+  async clearPolicyForDevice(tenantId: string, deviceId: string): Promise<void> {
+    const commands: Partial<Command>[] = [];
+
+    // Unlock if currently locked
+    const lastLock = await this.commandRepository.findOne({
+      where: { deviceId, type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (lastLock) {
+      const lastUnlock = await this.commandRepository.findOne({
+        where: { deviceId, type: CommandType.ADMIN_UNLOCK },
+        order: { createdAt: 'DESC' },
+      });
+      if (!lastUnlock || lastLock.createdAt > lastUnlock.createdAt) {
+        commands.push(this.commandRepository.create({
+          tenantId, deviceId,
+          type: CommandType.ADMIN_UNLOCK,
+          payload: {},
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }));
+      }
+    }
+
+    // Reset all policy rules to defaults (empty = all restrictions off)
+    commands.push(this.commandRepository.create({
+      tenantId, deviceId,
+      type: CommandType.UPDATE_POLICY,
+      payload: { policyId: null, rules: {} },
+      status: CommandStatus.PENDING,
+      createdBy: 'system',
+    }));
+
+    if (commands.length > 0) await this.commandRepository.save(commands);
   }
 
   // ─── Enrollment Token (QR-based zero-touch enrollment) ────────────────────

@@ -20,6 +20,8 @@ export interface UpdatePolicyDto {
   rules?: Partial<PolicyRules>;
   isDefault?: boolean;
   requiredAppIds?: string[];
+  /** packageNames of apps removed from requiredAppIds — used as fallback when catalog record is gone */
+  removedPackageNames?: string[];
 }
 
 @Injectable()
@@ -88,6 +90,11 @@ export class PoliciesService {
       await this.policyRepository.update({ tenantId, isDefault: true, id: Not(id) }, { isDefault: false });
     }
 
+    // Detect removed required apps before updating
+    const removedAppIds = dto.requiredAppIds !== undefined
+      ? (policy.requiredAppIds ?? []).filter(appId => !dto.requiredAppIds!.includes(appId))
+      : [];
+
     if (dto.name !== undefined) policy.name = dto.name;
     if (dto.description !== undefined) policy.description = dto.description;
     if (dto.isDefault !== undefined) policy.isDefault = dto.isDefault;
@@ -96,10 +103,40 @@ export class PoliciesService {
 
     const saved = await this.policyRepository.save(policy);
 
-    // Propagate update to all assigned devices
+    // Propagate UPDATE_POLICY to all assigned devices
     await this.propagatePolicyUpdate(tenantId, id, saved);
 
+    // Queue UNINSTALL_APP for each removed required app on all assigned devices
+    if (removedAppIds.length > 0) {
+      await this.propagateUninstall(tenantId, id, removedAppIds);
+    }
+
     return saved;
+  }
+
+  private async propagateUninstall(tenantId: string, policyId: string, removedAppIds: string[]): Promise<void> {
+    const [devices, apps] = await Promise.all([
+      this.deviceRepository.find({ where: { tenantId, policyId }, select: ['id'] }),
+      this.appRepository.findBy({ id: In(removedAppIds) }),
+    ]);
+    if (devices.length === 0 || apps.length === 0) return;
+
+    const commands: Command[] = [];
+    for (const device of devices) {
+      for (const app of apps) {
+        commands.push(
+          this.commandRepository.create({
+            tenantId,
+            deviceId: device.id,
+            type: CommandType.UNINSTALL_APP,
+            payload: { packageName: app.packageName, appName: app.name },
+            status: CommandStatus.PENDING,
+            createdBy: 'system',
+          }),
+        );
+      }
+    }
+    await this.commandRepository.save(commands);
   }
 
   private async buildPolicyPayload(policy: Policy): Promise<Record<string, any>> {
@@ -160,11 +197,130 @@ export class PoliciesService {
         createdBy: 'system',
       }),
     );
+
+    // If the target policy is currently in admin lock, lock the newly assigned device too
+    await this.syncAdminLockForNewDevice(tenantId, policyId, deviceId);
+  }
+
+  /** Sync admin lock state when a device is assigned to a new policy.
+   *  - New policy locked → send ADMIN_LOCK with same payload
+   *  - New policy unlocked but device is locked → send ADMIN_UNLOCK */
+  private async syncAdminLockForNewDevice(
+    tenantId: string,
+    policyId: string,
+    deviceId: string,
+  ): Promise<void> {
+    // Determine new policy lock state from peers
+    const peers = await this.deviceRepository.find({
+      where: { tenantId, policyId },
+      select: ['id'],
+    });
+    const peerIds = peers.map((d) => d.id).filter((pid) => pid !== deviceId);
+
+    let newPolicyIsLocked = false;
+    let lockPayload: Record<string, any> = {};
+
+    if (peerIds.length > 0) {
+      const peerLastLock = await this.commandRepository.findOne({
+        where: { deviceId: In(peerIds), type: CommandType.ADMIN_LOCK },
+        order: { createdAt: 'DESC' },
+      });
+      if (peerLastLock) {
+        const peerLastUnlock = await this.commandRepository.findOne({
+          where: { deviceId: In(peerIds), type: CommandType.ADMIN_UNLOCK },
+          order: { createdAt: 'DESC' },
+        });
+        newPolicyIsLocked = !peerLastUnlock || peerLastLock.createdAt > peerLastUnlock.createdAt;
+        lockPayload = peerLastLock.payload;
+      }
+    }
+
+    if (newPolicyIsLocked) {
+      await this.commandRepository.save(
+        this.commandRepository.create({
+          tenantId, deviceId,
+          type: CommandType.ADMIN_LOCK,
+          payload: lockPayload,
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }),
+      );
+      return;
+    }
+
+    // New policy is not locked — unlock the device if it's currently locked
+    const deviceLastLock = await this.commandRepository.findOne({
+      where: { deviceId, type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (!deviceLastLock) return;
+
+    const deviceLastUnlock = await this.commandRepository.findOne({
+      where: { deviceId, type: CommandType.ADMIN_UNLOCK },
+      order: { createdAt: 'DESC' },
+    });
+    const deviceIsLocked = !deviceLastUnlock || deviceLastLock.createdAt > deviceLastUnlock.createdAt;
+    if (!deviceIsLocked) return;
+
+    await this.commandRepository.save(
+      this.commandRepository.create({
+        tenantId, deviceId,
+        type: CommandType.ADMIN_UNLOCK,
+        payload: {},
+        status: CommandStatus.PENDING,
+        createdBy: 'system',
+      }),
+    );
   }
 
   async remove(tenantId: string, id: string): Promise<void> {
     const policy = await this.findOne(tenantId, id);
+
+    // Reset all devices that were assigned to this policy before deleting it
+    const affectedDevices = await this.deviceRepository.find({
+      where: { tenantId, policyId: id },
+      select: ['id'],
+    });
+    for (const device of affectedDevices) {
+      await this.clearPolicyForDevice(tenantId, device.id);
+    }
+
     await this.deviceRepository.update({ tenantId, policyId: id }, { policyId: null });
     await this.policyRepository.remove(policy);
+  }
+
+  /** Send ADMIN_UNLOCK (if locked) + UPDATE_POLICY with empty rules when a device loses its policy. */
+  private async clearPolicyForDevice(tenantId: string, deviceId: string): Promise<void> {
+    const commands: any[] = [];
+
+    const lastLock = await this.commandRepository.findOne({
+      where: { deviceId, type: CommandType.ADMIN_LOCK },
+      order: { createdAt: 'DESC' },
+    });
+    if (lastLock) {
+      const lastUnlock = await this.commandRepository.findOne({
+        where: { deviceId, type: CommandType.ADMIN_UNLOCK },
+        order: { createdAt: 'DESC' },
+      });
+      if (!lastUnlock || lastLock.createdAt > lastUnlock.createdAt) {
+        commands.push(this.commandRepository.create({
+          tenantId, deviceId,
+          type: CommandType.ADMIN_UNLOCK,
+          payload: {},
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }));
+      }
+    }
+
+    commands.push(this.commandRepository.create({
+      tenantId, deviceId,
+      type: CommandType.UPDATE_POLICY,
+      payload: { policyId: null, rules: {} },
+      status: CommandStatus.PENDING,
+      createdBy: 'system',
+    }));
+
+    await this.commandRepository.save(commands);
   }
 }

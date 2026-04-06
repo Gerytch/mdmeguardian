@@ -24,7 +24,10 @@ interface MdmApi {
 
     // Commands (device-facing, token via header)
     @GET("device/commands/pending")
-    suspend fun getPendingCommands(@Header("X-Device-Token") token: String): List<CommandResponse>
+    suspend fun getPendingCommands(
+        @Header("X-Device-Token") token: String,
+        @Header("X-Agent-Version") agentVersion: String,
+    ): List<CommandResponse>
 
     @PATCH("device/commands/{id}/ack")
     suspend fun ackCommand(
@@ -33,10 +36,9 @@ interface MdmApi {
         @Body ack: CommandAckRequest,
     ): CommandResponse
 
-    // Location
+    // Location — endpoint is @Public on the backend, no auth required
     @POST("tenants/{tenantId}/geolocation")
     suspend fun postLocation(
-        @Header("Authorization") token: String,
         @Path("tenantId") tenantId: String,
         @Body location: LocationRequest,
     ): LocationResponse

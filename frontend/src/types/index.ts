@@ -35,6 +35,7 @@ export interface Device {
   isKioskMode: boolean
   batteryLevel: number | null
   isOnline: boolean
+  agentVersion: string | null
   createdAt: string
 }
 
@@ -58,9 +59,6 @@ export interface PolicyRules {
   kioskMode: boolean
   kioskModeType?: 'whitelist' | 'blacklist'
   kioskApps: string[]
-  passwordRequired: boolean
-  minPasswordLength?: number
-  maxFailedAttempts?: number
   screenTimeoutSeconds?: number
   locationTracking: boolean
   trackingIntervalMinutes: number

@@ -79,6 +79,7 @@ export default function DeviceSessionsPage() {
   const [filterTo, setFilterTo] = useState('')
 
   const [exporting, setExporting] = useState(false)
+  const [closing, setClosing] = useState<string | null>(null)
 
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -143,6 +144,16 @@ export default function DeviceSessionsPage() {
     }
     return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
   }, [sessions, page])
+
+  const handleClose = async (sessionId: string) => {
+    if (!tenantId) return
+    setClosing(sessionId)
+    try {
+      await deviceSessionsApi.close(tenantId, sessionId)
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'INTERRUPTED', endedAt: new Date().toISOString() } : s))
+    } catch {}
+    setClosing(null)
+  }
 
   const applyFilters = () => {
     setPage(1)
@@ -279,6 +290,7 @@ export default function DeviceSessionsPage() {
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Fim</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Duração</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -318,6 +330,17 @@ export default function DeviceSessionsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <SessionStatusBadge status={s.status} />
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {s.status === 'ACTIVE' && (
+                        <button
+                          onClick={() => handleClose(s.id)}
+                          disabled={closing === s.id}
+                          className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                        >
+                          {closing === s.id ? 'Encerrando...' : 'Encerrar'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

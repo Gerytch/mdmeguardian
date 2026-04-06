@@ -46,6 +46,17 @@ export class DeviceSessionsService {
       .execute()
   }
 
+  async closeById(tenantId: string, sessionId: string): Promise<void> {
+    await this.sessionRepository
+      .createQueryBuilder()
+      .update(DeviceSession)
+      .set({ status: DeviceSessionStatus.INTERRUPTED, endedAt: new Date(), endedReason: 'admin_forced' })
+      .where('id = :sessionId', { sessionId })
+      .andWhere('tenantId = :tenantId', { tenantId })
+      .andWhere('status = :status', { status: DeviceSessionStatus.ACTIVE })
+      .execute()
+  }
+
   async endSession(
     deviceId: string,
     sessionId: string,
@@ -73,8 +84,8 @@ export class DeviceSessionsService {
       limit?: number
     },
   ): Promise<{ data: DeviceSession[]; total: number; page: number; limit: number }> {
-    const page = filters?.page ?? 1
-    const limit = filters?.limit ?? 50
+    const page = filters?.page || 1
+    const limit = filters?.limit || 50
 
     const qb = this.sessionRepository
       .createQueryBuilder('session')

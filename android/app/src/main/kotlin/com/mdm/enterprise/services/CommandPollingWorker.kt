@@ -1,6 +1,7 @@
 package com.mdm.enterprise.services
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.work.*
 import com.google.gson.Gson
@@ -58,12 +59,21 @@ class CommandPollingWorker(
     private val apkInstaller = ApkInstaller(applicationContext)
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // Watchdog: restart the real-time foreground service if the OS killed it.
+        // WorkManager is exempt from Android 14+ background start restrictions, so
+        // startForegroundService() is always allowed here.
+        try {
+            CommandPollingService.start(applicationContext)
+        } catch (e: Exception) {
+            Log.w(TAG, "Watchdog: could not restart CommandPollingService: ${e.message}")
+        }
+
         val deviceToken = prefs.getStr("device_token") ?: return@withContext Result.failure()
         val deviceId = prefs.getStr("device_id") ?: return@withContext Result.failure()
         val tenantId = prefs.getStr("tenant_id") ?: return@withContext Result.failure()
 
         try {
-            val commands = api.getPendingCommands(deviceToken)
+            val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME)
             Log.i(TAG, "Fetched ${commands.size} pending commands")
 
             for (command in commands) {

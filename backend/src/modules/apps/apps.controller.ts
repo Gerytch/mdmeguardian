@@ -121,7 +121,8 @@ export class AppsController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'apks');
+          const base = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
+          const dir = join(base, 'apks');
           mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },

@@ -27,6 +27,7 @@ export enum CommandType {
   SEND_MESSAGE = 'SEND_MESSAGE',
   GET_APPS = 'GET_APPS',
   NETWORK_TEST = 'NETWORK_TEST',
+  UPDATE_AGENT = 'UPDATE_AGENT',
 }
 
 export enum CommandStatus {

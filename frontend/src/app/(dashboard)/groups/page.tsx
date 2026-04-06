@@ -40,13 +40,13 @@ export default function GroupsPage() {
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showAssignPolicyModal, setShowAssignPolicyModal] = useState(false)
   const [showAddDeviceModal, setShowAddDeviceModal] = useState(false)
 
   const [editingGroup, setEditingGroup] = useState<DeviceGroup | null>(null)
   const [form, setForm] = useState({ name: '', description: '' })
-  const [selectedPolicyId, setSelectedPolicyId] = useState('')
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
+  const [showConflictModal, setShowConflictModal] = useState(false)
+  const [conflictInfo, setConflictInfo] = useState<{ device: any; oldGroup: DeviceGroup } | null>(null)
 
   const tenantId = getTenantId()
 
@@ -84,9 +84,15 @@ export default function GroupsPage() {
   const policyName = (policyId: string | null) =>
     policies.find(p => p.id === policyId)?.name ?? null
 
+  // All devices except those already in this group (devices in other groups still show, with a warning)
   const availableDevices = devices.filter(
     (d: any) => d.groupId !== selectedGroup?.id
   )
+
+  const deviceGroupName = (d: any) => {
+    if (!d.groupId) return null
+    return groups.find(g => g.id === d.groupId)?.name ?? null
+  }
 
   // --- Create ---
   const openCreate = () => {
@@ -173,52 +179,26 @@ export default function GroupsPage() {
     }
   }
 
-  // --- Assign policy ---
-  const openAssignPolicy = (group: DeviceGroup) => {
-    setEditingGroup(group)
-    setSelectedPolicyId(group.policyId ?? '')
-    setError('')
-    setShowAssignPolicyModal(true)
-  }
-
-  const handleAssignPolicy = async () => {
-    if (!tenantId || !editingGroup || !selectedPolicyId) return
-    setSaving(true)
-    setError('')
-    try {
-      await deviceGroupsApi.assignPolicy(tenantId, editingGroup.id, selectedPolicyId)
-      setShowAssignPolicyModal(false)
-      setEditingGroup(null)
-      loadAll()
-      if (selectedGroup?.id === editingGroup.id) {
-        await refreshSelectedGroup(editingGroup.id)
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.message
-      setError(Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao atribuir política')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRemovePolicy = async (group: DeviceGroup) => {
-    if (!tenantId) return
-    if (!window.confirm('Remover a política deste grupo?')) return
-    try {
-      await deviceGroupsApi.removePolicy(tenantId, group.id)
-      loadAll()
-      if (selectedGroup?.id === group.id) {
-        await refreshSelectedGroup(group.id)
-      }
-    } catch {
-      alert('Erro ao remover política')
-    }
-  }
-
   // --- Add device ---
-  const handleAddDevice = async () => {
+  const handleAddDeviceClick = () => {
+    if (!selectedGroup || !selectedDeviceId) return
+    const device = devices.find((d: any) => d.id === selectedDeviceId)
+    if (device?.groupId && device.groupId !== selectedGroup.id) {
+      const oldGroup = groups.find(g => g.id === device.groupId)
+      if (oldGroup) {
+        setConflictInfo({ device, oldGroup })
+        setShowConflictModal(true)
+        return
+      }
+    }
+    doAddDevice()
+  }
+
+  const doAddDevice = async () => {
     if (!tenantId || !selectedGroup || !selectedDeviceId) return
     setSaving(true)
+    setShowConflictModal(false)
+    setConflictInfo(null)
     try {
       await deviceGroupsApi.addDevice(tenantId, selectedGroup.id, selectedDeviceId)
       setSelectedDeviceId('')
@@ -382,61 +362,6 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {/* Assign Policy Modal */}
-      {showAssignPolicyModal && editingGroup && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900 text-lg">Atribuir Política</h3>
-              <button onClick={() => setShowAssignPolicyModal(false)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              {error && <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg">{error}</div>}
-              <p className="text-sm text-gray-600">
-                Grupo: <span className="font-medium text-gray-900">{editingGroup.name}</span>
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Política</label>
-                <select
-                  value={selectedPolicyId}
-                  onChange={e => setSelectedPolicyId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Selecione uma política...</option>
-                  {policies.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-xs text-amber-700">
-                  Ao atribuir uma política ao grupo, ela será aplicada a todos os dispositivos do grupo imediatamente.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
-              <button
-                onClick={() => setShowAssignPolicyModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAssignPolicy}
-                disabled={saving || !selectedPolicyId}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-              >
-                {saving ? 'Atribuindo...' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Add Device Modal */}
       {showAddDeviceModal && selectedGroup && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -461,14 +386,33 @@ export default function GroupsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">Selecione um dispositivo...</option>
-                  {availableDevices.map((d: any) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
+                  {availableDevices.map((d: any) => {
+                    const grp = deviceGroupName(d)
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {d.name}{grp ? ` — já em "${grp}"` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
               </div>
               {availableDevices.length === 0 && (
                 <p className="text-xs text-gray-400">Todos os dispositivos já estão neste grupo.</p>
               )}
+              {selectedDeviceId && (() => {
+                const dev = devices.find((d: any) => d.id === selectedDeviceId)
+                const grp = dev ? deviceGroupName(dev) : null
+                return grp ? (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <p className="text-xs text-amber-700">
+                      Este dispositivo já pertence ao grupo <span className="font-semibold">"{grp}"</span>. Ao confirmar, ele será movido para <span className="font-semibold">"{selectedGroup?.name}"</span>. Um comparativo será exibido antes da confirmação.
+                    </p>
+                  </div>
+                ) : null
+              })()}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
               <button
@@ -478,11 +422,115 @@ export default function GroupsPage() {
                 Cancelar
               </button>
               <button
-                onClick={handleAddDevice}
+                onClick={handleAddDeviceClick}
                 disabled={saving || !selectedDeviceId}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
               >
                 {saving ? 'Adicionando...' : 'Adicionar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conflict confirmation modal */}
+      {showConflictModal && conflictInfo && selectedGroup && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+              <div className="flex-shrink-0 w-9 h-9 bg-amber-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Dispositivo já pertence a outro grupo</h3>
+                <p className="text-sm text-gray-500">Revise as mudanças antes de confirmar</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-gray-700">
+                O dispositivo <span className="font-semibold text-gray-900">"{conflictInfo.device.name}"</span> será movido de grupo. Confira o comparativo:
+              </p>
+
+              {/* Comparison table */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Old group */}
+                <div className="border border-red-200 rounded-lg bg-red-50 p-4">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-xs font-semibold text-red-600 uppercase tracking-wide">Grupo atual</span>
+                  </div>
+                  <p className="font-semibold text-gray-900 text-sm mb-2">{conflictInfo.oldGroup.name}</p>
+                  {conflictInfo.oldGroup.description && (
+                    <p className="text-xs text-gray-500 mb-2 line-clamp-2">{conflictInfo.oldGroup.description}</p>
+                  )}
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Política</span>
+                      <span className="font-medium text-right">{policyName(conflictInfo.oldGroup.policyId) ?? <span className="text-gray-400 italic">Nenhuma</span>}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Dispositivos</span>
+                      <span className="font-medium">{conflictInfo.oldGroup.deviceCount ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* New group */}
+                <div className="border border-green-200 rounded-lg bg-green-50 p-4">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-xs font-semibold text-green-600 uppercase tracking-wide">Novo grupo</span>
+                  </div>
+                  <p className="font-semibold text-gray-900 text-sm mb-2">{selectedGroup.name}</p>
+                  {selectedGroup.description && (
+                    <p className="text-xs text-gray-500 mb-2 line-clamp-2">{selectedGroup.description}</p>
+                  )}
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Política</span>
+                      <span className="font-medium text-right">{policyName(selectedGroup.policyId) ?? <span className="text-gray-400 italic">Nenhuma</span>}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Dispositivos</span>
+                      <span className="font-medium">{selectedGroup.deviceCount ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Policy change warning */}
+              {conflictInfo.oldGroup.policyId !== selectedGroup.policyId && (
+                <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <svg className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-xs text-blue-700">
+                    A política aplicada ao dispositivo será alterada de <span className="font-semibold">"{policyName(conflictInfo.oldGroup.policyId) ?? 'Nenhuma'}"</span> para <span className="font-semibold">"{policyName(selectedGroup.policyId) ?? 'Nenhuma'}"</span>.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+              <button
+                onClick={() => { setShowConflictModal(false); setConflictInfo(null) }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={doAddDevice}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+              >
+                {saving ? 'Movendo...' : 'Confirmar mudança de grupo'}
               </button>
             </div>
           </div>
@@ -555,20 +603,6 @@ export default function GroupsPage() {
                     >
                       {isExpanded ? 'Fechar' : 'Ver dispositivos'}
                     </button>
-                    <button
-                      onClick={() => openAssignPolicy(group)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
-                    >
-                      Atribuir política
-                    </button>
-                    {group.policyId && (
-                      <button
-                        onClick={() => handleRemovePolicy(group)}
-                        className="text-sm text-red-500 hover:text-red-700 px-2"
-                      >
-                        Remover política
-                      </button>
-                    )}
                     <div className="flex items-center gap-1 ml-auto">
                       <button
                         onClick={() => openEdit(group)}

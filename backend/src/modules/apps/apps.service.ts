@@ -2,6 +2,9 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { App } from './entities/app.entity';
+import { Device } from '../devices/entities/device.entity';
+import { Command, CommandStatus, CommandType } from '../commands/entities/command.entity';
+import { Policy } from '../policies/entities/policy.entity';
 
 export interface CreateAppDto {
   name: string;
@@ -31,6 +34,12 @@ export class AppsService {
   constructor(
     @InjectRepository(App)
     private readonly appRepository: Repository<App>,
+    @InjectRepository(Device)
+    private readonly deviceRepository: Repository<Device>,
+    @InjectRepository(Command)
+    private readonly commandRepository: Repository<Command>,
+    @InjectRepository(Policy)
+    private readonly policyRepository: Repository<Policy>,
   ) {}
 
   async create(tenantId: string, dto: CreateAppDto): Promise<App> {
@@ -75,7 +84,40 @@ export class AppsService {
 
   async remove(tenantId: string, id: string): Promise<void> {
     const app = await this.findOne(tenantId, id);
+    const { packageName, name } = app;
+
     await this.appRepository.remove(app);
+
+    // Remove this app from requiredAppIds in all policies that reference it
+    const policies = await this.policyRepository.find({ where: { tenantId } });
+    const toUpdate = policies.filter(p => p.requiredAppIds?.includes(id));
+    if (toUpdate.length > 0) {
+      await Promise.all(
+        toUpdate.map(p => {
+          p.requiredAppIds = p.requiredAppIds.filter(aid => aid !== id);
+          return this.policyRepository.save(p);
+        }),
+      );
+    }
+
+    // Queue UNINSTALL_APP on all tenant devices — they ignore it if not installed
+    const devices = await this.deviceRepository.find({
+      where: { tenantId },
+      select: ['id'],
+    });
+    if (devices.length > 0) {
+      const commands = devices.map(device =>
+        this.commandRepository.create({
+          tenantId,
+          deviceId: device.id,
+          type: CommandType.UNINSTALL_APP,
+          payload: { packageName, appName: name },
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }),
+      );
+      await this.commandRepository.save(commands);
+    }
   }
 
   async getRequired(tenantId: string): Promise<App[]> {
