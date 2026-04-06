@@ -161,6 +161,8 @@ const DEFAULT_RULES: PolicyRules = {
   screenTimeoutSeconds: 60,
   deviceUserAuthRequired: false,
   inactivityTimeoutMinutes: 5,
+  allowedApps: [],
+  blockedApps: [],
 }
 
 const DEFAULT_FORM = { name: '', description: '', isDefault: false, requiredAppIds: [] as string[], ...DEFAULT_RULES }
