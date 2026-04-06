@@ -8,11 +8,16 @@ import { getTenantId } from '@/lib/auth'
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1').replace(/\/api\/v1\/?$/, '')
 const APK_URL = `${BASE_URL}/uploads/eguardian-agent.apk`
 
+// Debug keystore SHA-256 → base64url (fixed for homolog build)
+const PROVISIONING_CHECKSUM = 'jNvhBamEu2WWDb2CNyxfgmTKJUW2vyXQDGW_CPbRSCw'
+const PROVISIONING_COMPONENT = 'com.mdm.enterprise.homolog/com.mdm.enterprise.admin.MdmDeviceAdminReceiver'
+
 export default function EnrollPage() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [expiresAt, setExpiresAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [provisioningQr, setProvisioningQr] = useState<string | null>(null)
   const tenantId = getTenantId()
 
   const generate = useCallback(async () => {
@@ -38,6 +43,19 @@ export default function EnrollPage() {
   }, [tenantId])
 
   useEffect(() => { generate() }, [generate])
+
+  // Generate provisioning QR (static — no API call)
+  useEffect(() => {
+    const payload = JSON.stringify({
+      'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': PROVISIONING_COMPONENT,
+      'android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM': PROVISIONING_CHECKSUM,
+      'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': APK_URL,
+      'android.app.extra.PROVISIONING_SKIP_ENCRYPTION': false,
+      'android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED': true,
+    })
+    QRCode.toDataURL(payload, { width: 280, margin: 2, color: { dark: '#111827', light: '#ffffff' } })
+      .then(setProvisioningQr)
+  }, [])
 
   // Auto-regenerate 1 min before expiry
   useEffect(() => {
@@ -158,6 +176,53 @@ export default function EnrollPage() {
           <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
             <p className="text-xs font-medium text-gray-500 mb-1">Servidor configurado</p>
             <p className="text-xs font-mono text-gray-700 break-all">{BASE_URL}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Provisioning QR — for factory-reset devices */}
+      <div className="max-w-3xl mt-8 border-t border-gray-100 pt-8">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Provisionamento Empresarial</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Para dispositivos zerados (factory reset). Instala o app e configura como Device Owner automaticamente — sem precisar de ADB.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center gap-4">
+            <h3 className="text-sm font-semibold text-gray-700 self-start">QR de Provisionamento</h3>
+            {provisioningQr ? (
+              <div className="border-4 border-primary-600 rounded-xl p-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={provisioningQr} alt="QR de Provisionamento Empresarial" width={280} height={280} />
+              </div>
+            ) : (
+              <div className="w-[280px] h-[280px] flex items-center justify-center bg-gray-50 rounded-xl border border-gray-100">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+              </div>
+            )}
+            <p className="text-xs text-gray-400 text-center">
+              Leia este QR na tela de configuração inicial do Android (toque 6× na tela de boas-vindas para ativar a câmera)
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Como usar</h3>
+            <ol className="space-y-4">
+              {[
+                { title: 'Factory reset no dispositivo', desc: 'Restaure o dispositivo para o padrão de fábrica e remova qualquer conta Google.' },
+                { title: 'Toque 6× na tela de boas-vindas', desc: 'A câmera de provisionamento abre automaticamente.' },
+                { title: 'Aponte para este QR', desc: 'O Android baixa e instala o E.Guardian, configura como Device Owner.' },
+                { title: 'Escaneie o QR de Enrollment', desc: 'Use o QR acima para registrar o dispositivo no servidor.' },
+              ].map((step, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{step.title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{step.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
         </div>
       </div>

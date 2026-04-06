@@ -33,6 +33,7 @@ android {
             isDebuggable = true
             isMinifyEnabled = false
             applicationIdSuffix = ".homolog"
+            signingConfig = signingConfigs.getByName("debug")
             buildConfigField("String", "API_BASE_URL", "\"http://56.125.80.141/api/v1\"")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
