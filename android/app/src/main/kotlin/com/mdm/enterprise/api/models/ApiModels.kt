@@ -174,3 +174,14 @@ data class QrEnrollmentData(
     val enrollmentToken: String,
     val policyId: String? = null,
 )
+
+data class EnrollDeviceRequest(
+    val enrollmentToken: String,
+    val name: String,
+    val serialNumber: String,
+    val imei: String? = null,
+    val androidVersion: String? = null,
+    val manufacturer: String? = null,
+    val model: String? = null,
+    val policyId: String? = null,
+)

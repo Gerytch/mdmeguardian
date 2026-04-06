@@ -16,8 +16,8 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.mdm.enterprise.R
 import com.mdm.enterprise.api.MdmApiClient
+import com.mdm.enterprise.api.models.EnrollDeviceRequest
 import com.mdm.enterprise.api.models.QrEnrollmentData
-import com.mdm.enterprise.api.models.RegisterDeviceRequest
 import com.mdm.enterprise.services.CommandPollingWorker
 import com.mdm.enterprise.services.LocationTrackingWorker
 import com.mdm.enterprise.utils.SecurePreferences
@@ -127,10 +127,10 @@ class QrProvisioningActivity : AppCompatActivity() {
                 contentResolver, android.provider.Settings.Secure.ANDROID_ID
             )
 
-            val response = api.registerDevice(
-                "Bearer ${data.enrollmentToken}",
+            val response = api.enrollWithToken(
                 data.tenantId,
-                RegisterDeviceRequest(
+                EnrollDeviceRequest(
+                    enrollmentToken = data.enrollmentToken,
                     name = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
                     serialNumber = androidId,
                     manufacturer = android.os.Build.MANUFACTURER,

@@ -52,12 +52,19 @@ interface MdmApi {
         @Body heartbeat: HeartbeatRequest,
     ): DeviceResponse
 
-    // Device registration
+    // Device registration (requires JWT — used by admin)
     @POST("tenants/{tenantId}/devices")
     suspend fun registerDevice(
         @Header("Authorization") token: String,
         @Path("tenantId") tenantId: String,
         @Body device: RegisterDeviceRequest,
+    ): RegisterDeviceResponse
+
+    // QR enrollment — no auth required (@Public on backend)
+    @POST("tenants/{tenantId}/devices/enroll")
+    suspend fun enrollWithToken(
+        @Path("tenantId") tenantId: String,
+        @Body device: EnrollDeviceRequest,
     ): RegisterDeviceResponse
 
     // App catalog sync (fire-and-forget on enrollment)
