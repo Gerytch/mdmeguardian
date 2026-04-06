@@ -29,6 +29,13 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3002/api/v1\"")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
+        create("homolog") {
+            isDebuggable = true
+            isMinifyEnabled = false
+            applicationIdSuffix = ".homolog"
+            buildConfigField("String", "API_BASE_URL", "\"http://56.125.80.141/api/v1\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             isDebuggable = false
             isMinifyEnabled = true
