@@ -377,6 +377,8 @@ export default function PoliciesPage() {
     screenTimeoutSeconds: form.screenTimeoutSeconds,
     deviceUserAuthRequired: form.deviceUserAuthRequired,
     inactivityTimeoutMinutes: form.inactivityTimeoutMinutes,
+    allowedApps: form.allowedApps,
+    blockedApps: form.blockedApps,
   })
 
   const stopPolling = () => {
@@ -791,14 +793,14 @@ export default function PoliciesPage() {
                 <Toggle
                   label="Exigir login no dispositivo"
                   hint="Usuários devem fazer login com PIN antes de usar o dispositivo"
-                  checked={form.deviceUserAuthRequired}
+                  checked={form.deviceUserAuthRequired ?? false}
                   onChange={v => set('deviceUserAuthRequired', v)}
                 />
                 {form.deviceUserAuthRequired && (
                   <NumberField
                     label="Timeout de inatividade (min)"
                     hint="Bloqueia após X minutos sem interação. 0 = nunca bloqueia automaticamente"
-                    value={form.inactivityTimeoutMinutes}
+                    value={form.inactivityTimeoutMinutes ?? 5}
                     onChange={v => set('inactivityTimeoutMinutes', v)}
                     min={0}
                     max={480}
