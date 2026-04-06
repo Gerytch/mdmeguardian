@@ -129,8 +129,8 @@ NEXT_PUBLIC_API_URL=http://SEU_IP_EC2/api/v1
 
 ```bash
 cd /var/www/eguardian/backend
-npm ci --omit=dev
-npm run build
+npm ci          # instala tudo (devDependencies necessário para nest build)
+npm run build   # gera o dist/
 ```
 
 ---
@@ -196,21 +196,23 @@ pm2 logs eguardian-frontend --lines 50
 
 ## PASSO 8 — Configurar Nginx
 
+O Nginx funciona como "porteiro": recebe tudo na porta 80 e repassa para o frontend (3000) ou backend (3001) conforme a URL.
+
+> **IMPORTANTE:** Use o comando `tee` abaixo — NÃO use `nano` para colar este conteúdo,
+> pois o nano pode interpretar errado caracteres especiais e corromper o arquivo.
+
+### 8.1 — Criar o arquivo de configuração
+
+Cole este bloco inteiro na EC2 de uma vez:
+
 ```bash
-sudo nano /etc/nginx/sites-available/eguardian
-```
-
-Cole o conteúdo abaixo:
-
-```nginx
+sudo tee /etc/nginx/sites-available/eguardian > /dev/null << 'EOF'
 server {
     listen 80;
-    server_name SEU_IP_EC2;
+    server_name _;
 
-    # Limite para upload de APK
     client_max_body_size 200M;
 
-    # Frontend (Next.js)
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -220,7 +222,6 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    # Backend API
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -229,20 +230,28 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # Arquivos de upload (serve direto, sem passar pelo Node)
     location /uploads {
         alias /var/www/eguardian/backend/uploads;
         expires 7d;
         add_header Cache-Control "public";
     }
 }
+EOF
 ```
 
-Ativar e reiniciar:
+> `server_name _;` aceita qualquer IP ou domínio — não precisa editar.
+
+### 8.2 — Ativar o site e testar
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/eguardian /etc/nginx/sites-enabled/
-sudo nginx -t          # deve mostrar "syntax is ok"
+# Ativar (cria symlink para sites-enabled)
+# Se já existir o symlink, o erro "File exists" pode ser ignorado
+sudo ln -s /etc/nginx/sites-available/eguardian /etc/nginx/sites-enabled/ 2>/dev/null || true
+
+# Testar a sintaxe — deve mostrar "syntax is ok"
+sudo nginx -t
+
+# Aplicar e habilitar no boot
 sudo systemctl restart nginx
 sudo systemctl enable nginx
 ```
@@ -332,10 +341,10 @@ cd /var/www/eguardian
 git pull origin master  # ou: git pull (após mudar branch padrão para master no GitHub)
 
 # Rebuild backend
-cd /var/www/eguardian/backend && npm ci --omit=dev && npm run build
+cd /var/www/eguardian/backend && npm ci && npm run build
 
 # Rebuild frontend (ou envie .next do Windows se for t3.micro)
-cd /var/www/eguardian/frontend && npm ci --omit=dev && npm run build
+cd /var/www/eguardian/frontend && npm ci && npm run build
 
 pm2 restart all
 ```
