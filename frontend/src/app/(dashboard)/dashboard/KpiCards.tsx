@@ -7,6 +7,7 @@ interface SessionRow {
   startedAt: string
   endedAt?: string
   status: string
+  deviceId?: string
   deviceUserId?: string
   deviceUserName?: string
   deviceUser?: { fullName?: string; username?: string }
