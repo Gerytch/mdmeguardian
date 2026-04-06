@@ -70,6 +70,10 @@ export default function DeviceDetailPage() {
   const [agentApkUrl, setAgentApkUrl]         = useState('')
   const [agentVersion, setAgentVersion]       = useState('')
 
+  // Delete device modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   // Kiosk / App Manager modal state
   const [showKiosk, setShowKiosk]         = useState(false)
   const [kioskEnabled, setKioskEnabled]   = useState(false)  // toggle inside modal
@@ -334,6 +338,20 @@ export default function DeviceDetailPage() {
     return new Date(lastLock.createdAt).getTime() > new Date(lastUnlock.createdAt).getTime()
   })()
 
+  const handleDelete = async () => {
+    if (!device) return
+    setDeleting(true)
+    try {
+      await devicesApi.delete(tenantId, device.id)
+      router.push('/devices')
+    } catch {
+      setMsg({ type: 'error', text: 'Erro ao remover o dispositivo.' })
+      setShowDeleteConfirm(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-full py-32">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
@@ -353,14 +371,52 @@ export default function DeviceDetailPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">{device.name}</h1>
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${device.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
             <span className="text-sm text-gray-500">{device.isOnline ? 'Online' : 'Offline'}</span>
           </div>
         </div>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Remover
+        </button>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Remover dispositivo?</h3>
+            <p className="text-sm text-gray-500 mb-1">
+              O app E.Guardian será <span className="font-semibold text-red-600">desinstalado</span> do dispositivo e todos os dados do MDM serão removidos.
+            </p>
+            <p className="text-xs text-gray-400 mb-6">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+              >
+                {deleting ? 'Removendo...' : 'Remover'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <div className={`mb-6 p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>

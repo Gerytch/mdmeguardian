@@ -231,6 +231,21 @@ export class DevicesService {
 
   async remove(tenantId: string, id: string): Promise<void> {
     const device = await this.findOne(tenantId, id);
+    // Send UNINSTALL_AGENT so the app removes itself and clears Device Owner
+    if (device.isOnline) {
+      await this.commandRepository.save(
+        this.commandRepository.create({
+          tenantId,
+          deviceId: id,
+          type: CommandType.UNINSTALL_AGENT,
+          payload: {},
+          status: CommandStatus.PENDING,
+          createdBy: 'system',
+        }),
+      );
+      // Give the device a moment to pick up the command before we cascade-delete
+      await new Promise((r) => setTimeout(r, 3000));
+    }
     await this.deviceRepository.remove(device);
   }
 

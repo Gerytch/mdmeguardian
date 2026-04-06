@@ -318,6 +318,25 @@ class CommandPollingService : Service() {
                         result.putAll(testResult)
                     }
 
+                    "UNINSTALL_AGENT" -> {
+                        val pkg = applicationContext.packageName
+                        // 1. Clear Device Owner so the package can be uninstalled
+                        try { dpm.clearDeviceOwnerApp(pkg) } catch (_: Exception) {}
+                        // 2. Uninstall the agent silently via PackageInstaller
+                        val installer = applicationContext.packageManager.packageInstaller
+                        val intent = android.content.Intent("android.intent.action.MAIN")
+                            .setPackage(pkg)
+                        val piFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+                        else
+                            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        val pi = android.app.PendingIntent.getBroadcast(
+                            applicationContext, pkg.hashCode(), intent, piFlags)
+                        installer.uninstall(pkg, pi.intentSender)
+                        result["uninstalled"] = true
+                        Log.i(TAG, "UNINSTALL_AGENT: device owner cleared, uninstall triggered")
+                    }
+
                     else -> {
                         Log.w(TAG, "Unknown command type: ${command.type}")
                         result["warning"] = "Unknown command type"

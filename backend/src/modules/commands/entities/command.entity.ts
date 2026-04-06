@@ -28,6 +28,7 @@ export enum CommandType {
   GET_APPS = 'GET_APPS',
   NETWORK_TEST = 'NETWORK_TEST',
   UPDATE_AGENT = 'UPDATE_AGENT',
+  UNINSTALL_AGENT = 'UNINSTALL_AGENT',
 }
 
 export enum CommandStatus {
