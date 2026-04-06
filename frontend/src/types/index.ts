@@ -33,6 +33,7 @@ export interface Device {
   lastSeenAt: string | null
   policyId: string | null
   isKioskMode: boolean
+  kioskApps: string[] | null
   batteryLevel: number | null
   isOnline: boolean
   agentVersion: string | null
