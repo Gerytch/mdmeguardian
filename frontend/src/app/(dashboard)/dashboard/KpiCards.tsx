@@ -436,6 +436,7 @@ function TopDevicesCard({ sessions, devices }: { sessions: SessionRow[]; devices
   const byDevice = new Map<string, { name: string; count: number; totalMs: number }>()
 
   sessions.forEach(s => {
+    if (!s.deviceId) return
     const d = devices.find(d => d.id === s.deviceId)
     const name = d?.name ?? s.deviceId.slice(0, 8)
     const start = new Date(s.startedAt).getTime()
