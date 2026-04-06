@@ -8,12 +8,21 @@ android {
     namespace = "com.mdm.enterprise"
     compileSdk = 36
 
+    signingConfigs {
+        create("homologRelease") {
+            storeFile = file("C:/keys/eguardian-release.keystore")
+            storePassword = "eguardian123"
+            keyAlias = "eguardian"
+            keyPassword = "eguardian123"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.mdm.enterprise"
         minSdk = 25
         targetSdk = 36
-        versionCode = 17
-        versionName = "1.3.1"
+        versionCode = 18
+        versionName = "1.3.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3002/api/v1\"")
         buildConfigField("int", "COMMAND_POLL_INTERVAL_MINUTES", "15")
@@ -30,12 +39,12 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         create("homolog") {
-            isDebuggable = true
+            isDebuggable = false
             isMinifyEnabled = false
             applicationIdSuffix = ".homolog"
-            signingConfig = signingConfigs.getByName("debug")
-            buildConfigField("String", "API_BASE_URL", "\"http://56.125.80.141/api/v1\"")
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
+            signingConfig = signingConfigs.getByName("homologRelease")
+            buildConfigField("String", "API_BASE_URL", "\"https://eg.expresso3300.com.br/api/v1\"")
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
         }
         release {
             isDebuggable = false
