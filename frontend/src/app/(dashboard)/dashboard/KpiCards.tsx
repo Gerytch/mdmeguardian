@@ -527,8 +527,8 @@ function PeakConcurrentCard({ sessions }: { sessions: SessionRow[] }) {
           <div className="flex justify-between">
             <span>Pico em</span>
             <span className="font-medium text-gray-700">
-              {peakTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-              {' '}às {peakTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              {(peakTime as Date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              {' '}às {(peakTime as Date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
         )}
