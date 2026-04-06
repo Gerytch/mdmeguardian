@@ -70,7 +70,7 @@ psql -U mdm_user -h localhost -d mdm_db \
 cd /var/www
 
 # Clonar o repositório (primeira vez)
-git clone https://github.com/Gerytch/mdmeguardian.git eguardian
+git clone -b master https://github.com/Gerytch/mdmeguardian.git eguardian
 
 # Criar diretório de uploads (não está no git)
 mkdir -p /var/www/eguardian/backend/uploads/apks
@@ -329,7 +329,7 @@ Na EC2 — pull e rebuild:
 
 ```bash
 cd /var/www/eguardian
-git pull origin master
+git pull origin master  # ou: git pull (após mudar branch padrão para master no GitHub)
 
 # Rebuild backend
 cd /var/www/eguardian/backend && npm ci --omit=dev && npm run build
