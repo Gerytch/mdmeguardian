@@ -4,52 +4,15 @@
 
 ---
 
-## O QUE ENVIAR PARA A EC2
+## REPOSITÓRIO GIT
 
-Envie **somente estes arquivos** (não envie node_modules, .next, dist):
+O projeto está no GitHub — o deploy é feito via `git clone` / `git pull`.
+Não é necessário enviar arquivos manualmente (`node_modules`, `.next`, `dist` e `.env` nunca vão para o git).
 
-```
-e.guardian-master/
-├── backend/
-│   ├── src/
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── nest-cli.json
-│   ├── tsconfig.json
-│   └── tsconfig.build.json
-├── frontend/
-│   ├── src/
-│   ├── public/
-│   ├── package.json
-│   ├── package-lock.json
-│   └── tsconfig.json
-├── database/
-│   └── migrations/
-│       └── 001_initial_schema.sql
-└── ecosystem.config.js
-```
+**Repositório:** `https://github.com/Gerytch/mdmeguardian`
 
-**NÃO ENVIAR:** `node_modules/`, `backend/dist/`, `frontend/.next/`,
-`.env`, `.env.local`, `backend/uploads/`, `android/`
-
-### Comando para enviar (rode no Git Bash do Windows):
-
-```bash
-rsync -avz --progress \
-  --exclude 'node_modules' \
-  --exclude 'dist' \
-  --exclude '.next' \
-  --exclude '.env' \
-  --exclude '.env.local' \
-  --exclude 'uploads' \
-  --exclude 'android' \
-  --exclude '*.apk' \
-  /c/claude/e.guardian-master/ \
-  ubuntu@SEU_IP_EC2:/var/www/eguardian/
-```
-
-> Substitua `SEU_IP_EC2` pelo IP público da sua EC2.
-> Se usar chave SSH: adicione `-e "ssh -i /caminho/sua-chave.pem"`
+> `.env` e `.env.local` são criados **manualmente na EC2** (ver PASSO 4).
+> `backend/uploads/` é criado com `mkdir` na EC2 (ver PASSO 3).
 
 ---
 
@@ -101,13 +64,15 @@ psql -U mdm_user -h localhost -d mdm_db \
 
 ---
 
-## PASSO 3 — Enviar os Arquivos
-
-Rode o comando `rsync` da seção **O QUE ENVIAR** no seu Windows.
-
-Depois, na EC2, crie o diretório de uploads:
+## PASSO 3 — Clonar o Repositório na EC2
 
 ```bash
+cd /var/www
+
+# Clonar o repositório (primeira vez)
+git clone https://github.com/Gerytch/mdmeguardian.git eguardian
+
+# Criar diretório de uploads (não está no git)
 mkdir -p /var/www/eguardian/backend/uploads/apks
 mkdir -p /var/www/eguardian/backend/uploads/agent
 ```
@@ -115,8 +80,8 @@ mkdir -p /var/www/eguardian/backend/uploads/agent
 **Copie o APK do agente para a EC2** (rode no Windows):
 
 ```bash
-# Copiar o APK debug para a pasta de uploads
-scp /c/claude/e.guardian-master/android/app/build/outputs/apk/debug/app-debug.apk \
+# Copiar o APK de homolog para a pasta de uploads
+scp /c/claude/e.guardian-master/android/app/build/outputs/apk/homolog/app-homolog.apk \
   ubuntu@SEU_IP_EC2:/var/www/eguardian/backend/uploads/eguardian-agent.apk
 ```
 
@@ -190,13 +155,17 @@ No Windows (PowerShell):
 ```powershell
 cd C:\claude\e.guardian-master\frontend
 
-# Criar .env.local temporário apontando para a EC2
+# Criar .env.production apontando para a EC2
 "NEXT_PUBLIC_API_URL=http://SEU_IP_EC2/api/v1" | Out-File .env.production -Encoding utf8
 
 npm run build
+```
 
-# Enviar .next para a EC2 (Git Bash)
-# rsync -avz .next/ ubuntu@SEU_IP_EC2:/var/www/eguardian/frontend/.next/
+Enviar a pasta `.next` para a EC2 (Git Bash):
+
+```bash
+scp -r /c/claude/e.guardian-master/frontend/.next \
+  ubuntu@SEU_IP_EC2:/var/www/eguardian/frontend/.next
 ```
 
 ---
@@ -348,16 +317,26 @@ Login: `admin@eguardian.com` / `Admin@123`
 
 ## ATUALIZAR O SISTEMA (deploys futuros)
 
-```bash
-# No Windows — enviar apenas o que mudou
-rsync -avz --progress \
-  --exclude 'node_modules' --exclude 'dist' --exclude '.next' \
-  --exclude '.env' --exclude '.env.local' --exclude 'uploads' \
-  /c/claude/e.guardian-master/ ubuntu@SEU_IP_EC2:/var/www/eguardian/
+No seu Windows, após commitar e fazer push:
 
-# Na EC2 — rebuild e restart
-cd /var/www/eguardian/backend && npm run build
-cd /var/www/eguardian/frontend && npm run build   # ou enviar .next do Windows
+```bash
+git add .
+git commit -m "fix: descrição da mudança"
+git push homolog master
+```
+
+Na EC2 — pull e rebuild:
+
+```bash
+cd /var/www/eguardian
+git pull origin master
+
+# Rebuild backend
+cd /var/www/eguardian/backend && npm ci --omit=dev && npm run build
+
+# Rebuild frontend (ou envie .next do Windows se for t3.micro)
+cd /var/www/eguardian/frontend && npm ci --omit=dev && npm run build
+
 pm2 restart all
 ```
 
