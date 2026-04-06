@@ -9,7 +9,7 @@ const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/
 const APK_URL = `${BASE_URL}/uploads/eguardian-agent.apk`
 
 // Debug keystore SHA-256 → base64url (fixed for homolog build)
-const PROVISIONING_CHECKSUM = 'Dp7gAaUFPcUQ1_YF4dwer0a1KoLh1n0UUE_aQxUvVs4'
+const PROVISIONING_CHECKSUM = 'dtXll4PyP9KysSoV_uxNAFytkiT0-14Z3Pzu2w-6eNM'
 const PROVISIONING_COMPONENT = 'com.mdm.enterprise.homolog/com.mdm.enterprise.admin.MdmDeviceAdminReceiver'
 
 export default function EnrollPage() {
