@@ -321,6 +321,8 @@ class CommandPollingService : Service() {
                     "UNINSTALL_AGENT" -> {
                         val pkg = applicationContext.packageName
                         // 1. Clear Device Owner so the package can be uninstalled
+                        val dpm = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE)
+                            as android.app.admin.DevicePolicyManager
                         try { dpm.clearDeviceOwnerApp(pkg) } catch (_: Exception) {}
                         // 2. Uninstall the agent silently via PackageInstaller
                         val installer = applicationContext.packageManager.packageInstaller
