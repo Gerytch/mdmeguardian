@@ -35,6 +35,7 @@ android/keystore/
 *.apk
 *.aab
 *.keystore
+!releases/*.apk
 *.jks
 
 # =====================
