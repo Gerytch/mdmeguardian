@@ -350,6 +350,8 @@ export default function PoliciesPage() {
       screenTimeoutSeconds: p.rules.screenTimeoutSeconds ?? 60,
       deviceUserAuthRequired: p.rules.deviceUserAuthRequired ?? false,
       inactivityTimeoutMinutes: p.rules.inactivityTimeoutMinutes ?? 5,
+      allowedApps: p.rules.allowedApps ?? [],
+      blockedApps: p.rules.blockedApps ?? [],
     })
     setError('')
     setShowModal(true)
