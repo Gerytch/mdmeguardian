@@ -16,8 +16,8 @@ interface Device {
   id: string
   name: string
   isOnline: boolean
-  manufacturer?: string
-  model?: string
+  manufacturer?: string | null
+  model?: string | null
 }
 
 interface Props {
