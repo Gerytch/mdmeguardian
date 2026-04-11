@@ -72,19 +72,14 @@ class MdmPolicyService(private val context: Context) {
                 }
                 Log.i(TAG, "Location permissions auto-granted via Device Owner")
 
-                // Enable Wi-Fi scanning and high-accuracy location mode system-wide
-                try {
-                    dpm.setGlobalSetting(adminComponent, "wifi_scan_always_enabled", "1")
-                    Log.i(TAG, "Wi-Fi scan always enabled")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not enable Wi-Fi scan always: ${e.message}")
-                }
-                try {
-                    // LOCATION_MODE 3 = HIGH_ACCURACY (GPS + network + Wi-Fi)
-                    dpm.setSecureSetting(adminComponent, android.provider.Settings.Secure.LOCATION_MODE, "3")
-                    Log.i(TAG, "Location mode set to HIGH_ACCURACY")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not set location mode: ${e.message}")
+                // Enable location at system level (API 28+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    try {
+                        dpm.setLocationEnabled(adminComponent, true)
+                        Log.i(TAG, "Location enabled via setLocationEnabled()")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not enable location: ${e.message}")
+                    }
                 }
             }
             val intervalMinutes = rules.trackingIntervalMinutes.toLong().coerceAtLeast(1)
