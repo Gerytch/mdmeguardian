@@ -39,9 +39,7 @@ export default function DevicesPage() {
     setAgentUploading(true)
     setAgentError('')
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await appsApi.uploadApk(tenantId, form as any)
+      const res = await appsApi.uploadApk(tenantId, file)
       setAgentApkUrl(res.data.apkUrl)
       if (res.data.versionName) setAgentVersion(res.data.versionName)
     } catch {
