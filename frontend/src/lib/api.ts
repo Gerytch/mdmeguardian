@@ -82,9 +82,7 @@ export const appsApi = {
   uploadApk: (tenantId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post(`/tenants/${tenantId}/apps/upload`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post(`/tenants/${tenantId}/apps/upload`, form)
   },
   getAgentApk: (tenantId: string) => api.get(`/tenants/${tenantId}/apps/agent`),
 }
