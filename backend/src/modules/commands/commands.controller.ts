@@ -98,6 +98,16 @@ export class CommandsController {
     return this.commandsService.cancel(tenantId, id);
   }
 
+  @Post('tenants/:tenantId/agents/dispatch-update')
+  @HttpCode(HttpStatus.CREATED)
+  dispatchAgentUpdate(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Body() dto: { apkUrl: string; version: string; deviceIds?: string[] },
+    @Request() req: any,
+  ): Promise<{ dispatched: number; commands: Command[] }> {
+    return this.commandsService.dispatchAgentUpdate(tenantId, dto, req.user?.id ?? 'system');
+  }
+
   @Post('tenants/:tenantId/commands/:id/retry')
   @HttpCode(HttpStatus.CREATED)
   retry(

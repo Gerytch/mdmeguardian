@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.7.0] — 2026-04-10 — APK 1.3.3 (versionCode 19)
+
+### Summary
+Fix de GPS em dispositivos físicos (homologação): permissão de localização agora é auto-concedida via Device Owner. Nova feature de atualização em massa do agente via backend.
+
+### Fixed
+- **[android/MdmPolicyService]**: GPS não funcionava em dispositivos físicos porque `ACCESS_FINE_LOCATION` não era auto-concedida. Adicionado `dpm.setPermissionGrantState(GRANTED)` para `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` e `ACCESS_BACKGROUND_LOCATION` quando Device Owner e `locationTracking = true`
+
+### Added
+- **[backend/commands.service]**: Novo método `dispatchAgentUpdate` — envia `UPDATE_AGENT` em massa para todos os devices do tenant ou lista selecionada
+- **[backend/commands.controller]**: Novo endpoint `POST /tenants/:tenantId/agents/dispatch-update` com body `{ apkUrl, version, deviceIds? }`
+
+---
+
 ## [0.6.1] — 2026-04-05 — APK 1.3.1 (versionCode 17)
 
 ### Summary

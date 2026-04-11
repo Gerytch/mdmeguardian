@@ -1,5 +1,6 @@
 package com.mdm.enterprise.services
 
+import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
@@ -50,6 +51,27 @@ class MdmPolicyService(private val context: Context) {
 
         // Location tracking
         if (rules.locationTracking) {
+            // Auto-grant location permissions via Device Owner so real devices don't
+            // silently fail the runtime permission check in LocationTrackingWorker.
+            if (isDeviceOwner) {
+                listOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                ).forEach { perm ->
+                    try {
+                        dpm.setPermissionGrantState(
+                            adminComponent,
+                            context.packageName,
+                            perm,
+                            DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not auto-grant $perm: ${e.message}")
+                    }
+                }
+                Log.i(TAG, "Location permissions auto-granted via Device Owner")
+            }
             val intervalMinutes = rules.trackingIntervalMinutes.toLong().coerceAtLeast(1)
             Log.i(TAG, "Location tracking enabled — interval: ${intervalMinutes}min")
             LocationTrackingWorker.schedule(context, intervalMinutes)

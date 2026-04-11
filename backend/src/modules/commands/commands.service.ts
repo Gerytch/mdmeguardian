@@ -241,6 +241,34 @@ export class CommandsService {
     return this.commandRepository.save(command);
   }
 
+  /** Dispatches UPDATE_AGENT to all or selected devices of a tenant. */
+  async dispatchAgentUpdate(
+    tenantId: string,
+    dto: { apkUrl: string; version: string; deviceIds?: string[] },
+    createdBy: string,
+  ): Promise<{ dispatched: number; commands: Command[] }> {
+    const where: any = { tenantId };
+    if (dto.deviceIds?.length) where.id = In(dto.deviceIds);
+
+    const devices = await this.deviceRepository.find({ where, select: ['id'] });
+    if (!devices.length) return { dispatched: 0, commands: [] };
+
+    const commands = await this.commandRepository.save(
+      devices.map((device) =>
+        this.commandRepository.create({
+          tenantId,
+          deviceId: device.id,
+          type: CommandType.UPDATE_AGENT,
+          payload: { apkUrl: dto.apkUrl, version: dto.version },
+          status: CommandStatus.PENDING,
+          createdBy,
+        }),
+      ),
+    );
+
+    return { dispatched: commands.length, commands };
+  }
+
   async retryFailed(tenantId: string, id: string): Promise<Command> {
     const original = await this.findOne(tenantId, id);
     if (original.status !== CommandStatus.FAILED) {
