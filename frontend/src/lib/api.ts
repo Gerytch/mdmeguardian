@@ -91,6 +91,8 @@ export const appsApi = {
 export const commandsApi = {
   list: (tenantId: string) => api.get(`/tenants/${tenantId}/commands`),
   cancel: (tenantId: string, id: string) => api.patch(`/tenants/${tenantId}/commands/${id}/cancel`),
+  dispatchAgentUpdate: (tenantId: string, data: { apkUrl: string; version: string; deviceIds?: string[] }) =>
+    api.post(`/tenants/${tenantId}/agents/dispatch-update`, data),
 }
 
 export const geolocationApi = {

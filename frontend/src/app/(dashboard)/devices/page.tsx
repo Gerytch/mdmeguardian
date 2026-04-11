@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import QRCode from 'qrcode'
-import { devicesApi } from '@/lib/api'
+import { devicesApi, commandsApi, appsApi } from '@/lib/api'
 import { getTenantId } from '@/lib/auth'
 import { Device } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
@@ -21,6 +21,18 @@ export default function DevicesPage() {
   const [qrExpiresAt, setQrExpiresAt] = useState<Date | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState('')
+
+  // Agent update modal state
+  const [showUpdateAgent, setShowUpdateAgent] = useState(false)
+  const [agentApkUrl, setAgentApkUrl] = useState('')
+  const [agentVersion, setAgentVersion] = useState('')
+  const [agentUploading, setAgentUploading] = useState(false)
+  const [agentDispatching, setAgentDispatching] = useState(false)
+  const [agentResult, setAgentResult] = useState<{ dispatched: number } | null>(null)
+  const [agentError, setAgentError] = useState('')
+  const [agentTargetAll, setAgentTargetAll] = useState(true)
+  const [agentSelectedIds, setAgentSelectedIds] = useState<string[]>([])
+  const agentFileRef = useRef<HTMLInputElement>(null)
 
   const tenantId = getTenantId()
 
@@ -60,6 +72,50 @@ export default function DevicesPage() {
   // Check if QR is expired
   const qrExpired = qrExpiresAt ? new Date() > qrExpiresAt : false
 
+  const handleAgentApkUpload = async (file: File) => {
+    if (!tenantId) return
+    setAgentUploading(true)
+    setAgentError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await appsApi.upload(tenantId, form as any)
+      setAgentApkUrl(res.data.apkUrl)
+      if (res.data.versionName) setAgentVersion(res.data.versionName)
+    } catch {
+      setAgentError('Erro ao fazer upload do APK.')
+    } finally {
+      setAgentUploading(false)
+    }
+  }
+
+  const handleDispatchAgentUpdate = async () => {
+    if (!tenantId || !agentApkUrl || !agentVersion) return
+    setAgentDispatching(true)
+    setAgentError('')
+    setAgentResult(null)
+    try {
+      const deviceIds = agentTargetAll ? undefined : agentSelectedIds
+      const res = await commandsApi.dispatchAgentUpdate(tenantId, { apkUrl: agentApkUrl, version: agentVersion, deviceIds })
+      setAgentResult({ dispatched: res.data.dispatched })
+    } catch {
+      setAgentError('Erro ao despachar atualização.')
+    } finally {
+      setAgentDispatching(false)
+    }
+  }
+
+  const closeUpdateAgent = () => {
+    setShowUpdateAgent(false)
+    setAgentApkUrl('')
+    setAgentVersion('')
+    setAgentResult(null)
+    setAgentError('')
+    setAgentTargetAll(true)
+    setAgentSelectedIds([])
+    if (agentFileRef.current) agentFileRef.current.value = ''
+  }
+
   const statusColor = (s: Device['status']) =>
     s === 'ACTIVE'   ? 'bg-green-50 text-green-700' :
     s === 'PENDING'  ? 'bg-yellow-50 text-yellow-700' :
@@ -74,16 +130,143 @@ export default function DevicesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Dispositivos</h1>
           <p className="text-gray-500 mt-1">{devices.length} dispositivo{devices.length !== 1 ? 's' : ''} cadastrado{devices.length !== 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Adicionar Dispositivo
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowUpdateAgent(true)}
+            className="border border-indigo-300 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Atualizar Agente
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Adicionar Dispositivo
+          </button>
+        </div>
       </div>
+
+      {/* Modal de atualização do agente */}
+      {showUpdateAgent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeUpdateAgent}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+              <div>
+                <h3 className="font-semibold text-gray-900">Atualizar Agente E.Guardian</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Envia UPDATE_AGENT para os dispositivos selecionados</p>
+              </div>
+              <button onClick={closeUpdateAgent} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {agentResult ? (
+                <div className="flex flex-col items-center py-6 gap-3">
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="font-semibold text-gray-900">Atualização despachada!</p>
+                  <p className="text-sm text-gray-500">Comando enviado para <strong>{agentResult.dispatched}</strong> dispositivo{agentResult.dispatched !== 1 ? 's' : ''}.</p>
+                  <p className="text-xs text-gray-400">O agente irá baixar e instalar silenciosamente.</p>
+                  <button onClick={closeUpdateAgent} className="mt-2 px-5 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">Fechar</button>
+                </div>
+              ) : (
+                <>
+                  {/* APK Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">APK do Agente</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="URL do APK ou faça upload →"
+                        value={agentApkUrl}
+                        onChange={e => setAgentApkUrl(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                      <label className={`px-3 py-2 border rounded-lg text-sm font-medium cursor-pointer transition-colors ${agentUploading ? 'bg-gray-100 text-gray-400' : 'border-indigo-300 text-indigo-700 hover:bg-indigo-50'}`}>
+                        {agentUploading ? '...' : 'Upload'}
+                        <input
+                          ref={agentFileRef}
+                          type="file"
+                          accept=".apk"
+                          className="hidden"
+                          disabled={agentUploading}
+                          onChange={e => e.target.files?.[0] && handleAgentApkUpload(e.target.files[0])}
+                        />
+                      </label>
+                    </div>
+                    {agentApkUrl && <p className="text-xs text-green-600 mt-1 truncate">✓ {agentApkUrl}</p>}
+                  </div>
+
+                  {/* Versão */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Versão (ex: 1.3.3)</label>
+                    <input
+                      type="text"
+                      placeholder="1.3.3"
+                      value={agentVersion}
+                      onChange={e => setAgentVersion(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+
+                  {/* Alvo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Dispositivos alvo</label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={agentTargetAll} onChange={() => setAgentTargetAll(true)} className="accent-indigo-600" />
+                        <span className="text-sm text-gray-700">Todos os dispositivos <span className="text-gray-400">({devices.length})</span></span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={!agentTargetAll} onChange={() => setAgentTargetAll(false)} className="accent-indigo-600" />
+                        <span className="text-sm text-gray-700">Selecionar dispositivos</span>
+                      </label>
+                    </div>
+                    {!agentTargetAll && (
+                      <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                        {devices.map(d => (
+                          <label key={d.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="accent-indigo-600"
+                              checked={agentSelectedIds.includes(d.id)}
+                              onChange={e => setAgentSelectedIds(prev => e.target.checked ? [...prev, d.id] : prev.filter(x => x !== d.id))}
+                            />
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${d.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className="text-sm text-gray-700">{d.name}</span>
+                            <span className="text-xs text-gray-400 ml-auto">{d.agentVersion ?? '—'}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {agentError && <p className="text-sm text-red-600">{agentError}</p>}
+
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={closeUpdateAgent} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+                    <button
+                      onClick={handleDispatchAgentUpdate}
+                      disabled={agentDispatching || !agentApkUrl.trim() || !agentVersion.trim() || (!agentTargetAll && agentSelectedIds.length === 0)}
+                      className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {agentDispatching ? 'Despachando...' : 'Despachar Atualização'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de enrollment via QR */}
       {showAdd && (
