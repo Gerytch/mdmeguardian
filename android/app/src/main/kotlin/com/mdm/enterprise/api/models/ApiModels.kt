@@ -166,6 +166,14 @@ data class ScreenshotUploadResponse(
     val screenshotUrl: String,
 )
 
+// ─── Agent Update Result ───────────────────────────────────────────────────────
+
+data class InstallResultRequest(
+    val success: Boolean,
+    val installedVersion: String? = null,
+    val errorMessage: String? = null,
+)
+
 // ─── Enrollment ───────────────────────────────────────────────────────────────
 
 data class QrEnrollmentData(

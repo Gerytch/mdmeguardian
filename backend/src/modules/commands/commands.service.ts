@@ -33,6 +33,19 @@ export class AckCommandDto {
   errorMessage?: string;
 }
 
+export class InstallResultDto {
+  @IsBoolean()
+  success: boolean;
+
+  @IsOptional()
+  @IsString()
+  installedVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  errorMessage?: string;
+}
+
 @Injectable()
 export class CommandsService {
   constructor(
@@ -204,6 +217,33 @@ export class CommandsService {
     }
 
     return command;
+  }
+
+  /** Called by Android agent after self-update completes (success or failure).
+   *  Updates command.result without changing command.status — the command was already EXECUTED. */
+  async reportInstallResult(deviceToken: string, commandId: string, dto: InstallResultDto): Promise<void> {
+    const device = await this.deviceRepository
+      .createQueryBuilder('device')
+      .addSelect('device.deviceToken')
+      .where('device.deviceToken = :deviceToken', { deviceToken })
+      .getOne();
+    if (!device) throw new ForbiddenException('Invalid device token');
+
+    const command = await this.commandRepository.findOne({
+      where: { id: commandId, deviceId: device.id, tenantId: device.tenantId },
+    });
+    if (!command) throw new NotFoundException(`Command "${commandId}" not found for this device`);
+
+    command.result = {
+      ...(command.result ?? {}),
+      installResult: {
+        success: dto.success,
+        installedVersion: dto.installedVersion ?? null,
+        errorMessage: dto.errorMessage ?? null,
+        reportedAt: new Date().toISOString(),
+      },
+    };
+    await this.commandRepository.save(command);
   }
 
   /** Called by device to report in-progress status for long-running commands (e.g. NETWORK_TEST). */

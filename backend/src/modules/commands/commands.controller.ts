@@ -25,7 +25,7 @@ import { mkdirSync } from 'fs';
 import { IsArray, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ValidateNested } from 'class-validator';
-import { CommandsService, AckCommandDto } from './commands.service';
+import { CommandsService, AckCommandDto, InstallResultDto } from './commands.service';
 import { Command, CommandType } from './entities/command.entity';
 import { Public } from '../../common/decorators/public.decorator';
 import { AppsService } from '../apps/apps.service';
@@ -184,6 +184,19 @@ export class CommandsController {
     const screenshotUrl = `/uploads/screenshots/${file.filename}`;
     await this.commandsService.updateCommandProgress(token, id, 90, 'Screenshot capturado', screenshotUrl);
     return { screenshotUrl };
+  }
+
+  /** Android agent reports install result after self-update (fires on app restart). */
+  @Public()
+  @Patch('device/commands/:id/install-result')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  reportInstallResult(
+    @Headers('x-device-token') token: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: InstallResultDto,
+  ): Promise<void> {
+    if (!token) throw new UnauthorizedException('X-Device-Token header is required');
+    return this.commandsService.reportInstallResult(token, id, dto);
   }
 
   /** Android agent ACKs command. Header: X-Device-Token */

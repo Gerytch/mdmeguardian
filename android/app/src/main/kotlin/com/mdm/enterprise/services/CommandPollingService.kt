@@ -34,6 +34,9 @@ class CommandPollingService : Service() {
         private const val ADMIN_LOCK_CHANNEL_ID = "mdm_admin_lock_alert"
         private const val NOTIF_ID = 1001
         const val POLL_INTERVAL_MS = 5_000L
+        private const val KEY_PENDING_UPDATE_CMD = "pending_agent_update_cmd"
+        private const val KEY_PENDING_UPDATE_VER = "pending_agent_update_ver"
+        private const val KEY_PENDING_UPDATE_TS  = "pending_agent_update_ts"
 
         fun start(context: Context) {
             val intent = Intent(context, CommandPollingService::class.java)
@@ -74,6 +77,9 @@ class CommandPollingService : Service() {
             postAdminLockAlert(applicationContext, forceStart = true)
         }
 
+        // Check if a self-update was in progress — report result to backend
+        checkPendingAgentUpdate()
+
         pollingJob?.cancel()
         pollingJob = startPollingLoop()
         Log.i(TAG, "Command polling service started (interval: ${POLL_INTERVAL_MS}ms)")
@@ -86,6 +92,50 @@ class CommandPollingService : Service() {
         scope.cancel()
         super.onDestroy()
     }
+
+    /** On service start (including after self-update), check if there was a pending UPDATE_AGENT
+     *  and report the install result to the backend based on the current installed version. */
+    private fun checkPendingAgentUpdate() {
+        val pendingCommandId = prefs.getString(KEY_PENDING_UPDATE_CMD, null) ?: return
+        val targetVersion   = prefs.getString(KEY_PENDING_UPDATE_VER, null) ?: return
+        val timestampMs     = prefs.getLong(KEY_PENDING_UPDATE_TS, 0L)
+        val deviceToken     = prefs.getStr("device_token") ?: return
+
+        val currentVersion = try {
+            applicationContext.packageManager
+                .getPackageInfo(applicationContext.packageName, 0).versionName
+        } catch (_: Exception) { null }
+
+        val ageMs = System.currentTimeMillis() - timestampMs
+        val success = currentVersion == targetVersion
+        // Only report if install succeeded OR enough time has passed (timeout = 5 min)
+        if (!success && ageMs < 5 * 60 * 1_000L) {
+            Log.d(TAG, "Pending agent update ($targetVersion) still in progress — waiting")
+            return
+        }
+
+        // Clear stored state before reporting (prevents double-report on retry)
+        prefs.edit()
+            .remove(KEY_PENDING_UPDATE_CMD)
+            .remove(KEY_PENDING_UPDATE_VER)
+            .remove(KEY_PENDING_UPDATE_TS)
+            .apply()
+
+        scope.launch {
+            try {
+                val body = com.mdm.enterprise.api.models.InstallResultRequest(
+                    success          = success,
+                    installedVersion = currentVersion,
+                    errorMessage     = if (!success) "Version mismatch after install: expected $targetVersion, got $currentVersion (timeout ${ageMs / 1000}s)" else null,
+                )
+                api.reportInstallResult(deviceToken, pendingCommandId, body)
+                Log.i(TAG, "Agent update result reported: success=$success version=$currentVersion")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report agent update result: ${e.message}")
+            }
+        }
+    }
+
 
     private fun startPollingLoop(): Job = scope.launch {
         launch {
@@ -276,17 +326,22 @@ class CommandPollingService : Service() {
                             result["error"] = "apkUrl missing in payload"
                         } else {
                             Log.i(TAG, "UPDATE_AGENT: downloading v$version from $apkUrl")
+                            // Save pending update before triggering install.
+                            // checkPendingAgentUpdate() on next start will report the real result.
+                            prefs.edit()
+                                .putString(KEY_PENDING_UPDATE_CMD, command.id)
+                                .putString(KEY_PENDING_UPDATE_VER, version ?: "")
+                                .putLong(KEY_PENDING_UPDATE_TS, System.currentTimeMillis())
+                                .apply()
                             val agentApp = com.mdm.enterprise.api.models.RequiredApp(
                                 packageName = applicationContext.packageName,
                                 name        = "E.Guardian MDM Agent",
                                 apkUrl      = apkUrl,
                                 version     = version ?: "0",
                             )
-                            // installMissingApps skips if installed version == target version;
-                            // pass a fake current version so it always installs.
                             apkInstaller.installMissingApps(listOf(agentApp))
-                            result["triggered"] = true
-                            result["version"] = version ?: "unknown"
+                            result["status"] = "INSTALLING"
+                            result["targetVersion"] = version ?: "unknown"
                         }
                     }
 

@@ -75,6 +75,13 @@ interface MdmApi {
     ): retrofit2.Response<Unit>
 
     // Network Test progress
+    @PATCH("device/commands/{id}/install-result")
+    suspend fun reportInstallResult(
+        @Header("X-Device-Token") token: String,
+        @Path("id") commandId: String,
+        @Body body: InstallResultRequest,
+    ): retrofit2.Response<Unit>
+
     @PATCH("device/commands/{id}/progress")
     suspend fun reportProgress(
         @Header("X-Device-Token") token: String,

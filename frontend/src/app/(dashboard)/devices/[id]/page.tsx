@@ -621,6 +621,17 @@ export default function DeviceDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-900">{cmd.type}</p>
                   <p className="text-xs text-gray-400">{formatDistanceToNow(new Date(cmd.createdAt), { addSuffix: true })}</p>
+                  {/* Install result badge for UPDATE_AGENT */}
+                  {cmd.type === 'UPDATE_AGENT' && (() => {
+                    const ir = cmd.result?.installResult
+                    if (!ir && cmd.result?.status === 'INSTALLING') return (
+                      <p className="text-xs text-blue-600 mt-0.5">Instalando...</p>
+                    )
+                    if (!ir) return null
+                    return ir.success
+                      ? <p className="text-xs text-green-600 mt-0.5">✓ Instalado v{ir.installedVersion}</p>
+                      : <p className="text-xs text-red-600 mt-0.5" title={ir.errorMessage}>✗ Falha na instalação</p>
+                  })()}
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                   cmd.status === 'EXECUTED' ? 'bg-green-50 text-green-700' :
