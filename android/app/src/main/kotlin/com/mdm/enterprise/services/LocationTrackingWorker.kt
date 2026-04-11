@@ -3,21 +3,28 @@ package com.mdm.enterprise.services
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.work.*
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.Tasks
 import com.mdm.enterprise.api.MdmApiClient
-import com.mdm.enterprise.api.models.LocationRequest
+import com.mdm.enterprise.api.models.LocationRequest as MdmLocationRequest
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 class LocationTrackingWorker(
     context: Context,
@@ -29,7 +36,7 @@ class LocationTrackingWorker(
         const val WORK_NAME = "mdm_location_tracking"
 
         fun schedule(context: Context, intervalMinutes: Long = 5) {
-            val clampedInterval = intervalMinutes.coerceAtLeast(15) // WorkManager minimum is 15 min
+            val clampedInterval = intervalMinutes.coerceAtLeast(15)
             val request = PeriodicWorkRequestBuilder<LocationTrackingWorker>(
                 clampedInterval, TimeUnit.MINUTES,
                 1, TimeUnit.MINUTES,
@@ -40,8 +47,6 @@ class LocationTrackingWorker(
                         .build()
                 )
                 .build()
-
-            // REPLACE so a change in trackingIntervalMinutes takes effect immediately
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
                 ExistingPeriodicWorkPolicy.REPLACE,
@@ -68,43 +73,84 @@ class LocationTrackingWorker(
     private val api = MdmApiClient.getInstance(applicationContext)
     private val prefs = SecurePreferences.getInstance(applicationContext)
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val tenantId = prefs.getStr("tenant_id") ?: return@withContext Result.failure()
-        val deviceId = prefs.getStr("device_id") ?: return@withContext Result.failure()
+    /** Passive: gets cached fix without waking GPS hardware */
+    private suspend fun awaitLastLocation(fusedClient: FusedLocationProviderClient): Location? =
+        withTimeoutOrNull(5_000) {
+            suspendCancellableCoroutine { cont ->
+                fusedClient.lastLocation
+                    .addOnSuccessListener { if (cont.isActive) cont.resume(it) }
+                    .addOnFailureListener { if (cont.isActive) cont.resume(null) }
+                    .addOnCanceledListener { if (cont.isActive) cont.resume(null) }
+            }
+        }
+
+    /** Active: wakes GPS hardware and waits for first real fix */
+    private suspend fun requestActiveLocation(
+        fusedClient: FusedLocationProviderClient,
+        priority: Int,
+        timeoutMs: Long,
+    ): Location? = withTimeoutOrNull(timeoutMs) {
+        suspendCancellableCoroutine { cont ->
+            val req = LocationRequest.Builder(priority, 0)
+                .setMaxUpdates(1)
+                .setWaitForAccurateLocation(false)
+                .build()
+            val cb = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    if (cont.isActive) cont.resume(result.lastLocation)
+                }
+            }
+            fusedClient.requestLocationUpdates(req, cb, Looper.getMainLooper())
+            cont.invokeOnCancellation { fusedClient.removeLocationUpdates(cb) }
+        }
+    }
+
+    override suspend fun doWork(): Result {
+        val tenantId = prefs.getStr("tenant_id") ?: return Result.failure()
+        val deviceId = prefs.getStr("device_id") ?: return Result.failure()
 
         if (ActivityCompat.checkSelfPermission(
                 applicationContext, Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             Log.w(TAG, "Location permission not granted")
-            return@withContext Result.failure()
+            return Result.failure()
         }
 
-        try {
+        return try {
             val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
 
-            // 1st try: GPS high accuracy (may be null indoors / cold start)
-            var location = Tasks.await(
-                fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null),
-                15, TimeUnit.SECONDS,
-            )
-            // 2nd try: last known location from any app
+            // 1: cached last fix (instant)
+            var location = awaitLastLocation(fusedClient)
+            if (location != null) Log.i(TAG, "Got lastLocation")
+
+            // 2: active BALANCED request — wakes WiFi/cell positioning
             if (location == null) {
-                Log.w(TAG, "getCurrentLocation returned null, trying lastLocation")
-                location = Tasks.await(fusedClient.lastLocation, 5, TimeUnit.SECONDS)
+                Log.w(TAG, "lastLocation null, requesting BALANCED update")
+                location = requestActiveLocation(fusedClient, Priority.PRIORITY_BALANCED_POWER_ACCURACY, 20_000)
+                if (location != null) Log.i(TAG, "Got BALANCED active fix")
             }
-            // 3rd try: balanced (WiFi/cell) — works indoors without GPS
+
+            // 3: active HIGH_ACCURACY — wakes GPS hardware
             if (location == null) {
-                Log.w(TAG, "lastLocation null, trying BALANCED_POWER_ACCURACY")
-                location = Tasks.await(
-                    fusedClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
-                    15, TimeUnit.SECONDS,
-                )
+                Log.w(TAG, "BALANCED failed, requesting HIGH_ACCURACY update")
+                location = requestActiveLocation(fusedClient, Priority.PRIORITY_HIGH_ACCURACY, 30_000)
+                if (location != null) Log.i(TAG, "Got HIGH_ACCURACY fix")
+            }
+
+            // 4: Android native LocationManager (bypasses GMS entirely)
+            if (location == null) {
+                Log.w(TAG, "Fused failed, trying native LocationManager")
+                val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                if (location != null) Log.i(TAG, "Got native LocationManager fix")
             }
 
             if (location == null) {
                 Log.w(TAG, "All location strategies failed, retrying later")
-                return@withContext Result.retry()
+                return Result.retry()
             }
 
             val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
@@ -113,7 +159,7 @@ class LocationTrackingWorker(
 
             api.postLocation(
                 tenantId,
-                LocationRequest(
+                MdmLocationRequest(
                     deviceId = deviceId,
                     latitude = location.latitude,
                     longitude = location.longitude,
