@@ -184,9 +184,9 @@ export default function EnrollPage() {
             <p className="text-xs text-amber-700 mb-3">Ative estas opções no celular após instalar o APK:</p>
             <ol className="space-y-2">
               {[
-                { step: '1', text: 'Configurações → Localização → ativar o toggle principal' },
-                { step: '2', text: 'Localização → Serviços de localização → Precisão de localização do Google → ativar' },
-                { step: '3', text: 'Configurações → Wi-Fi → ⋮ → Procura de Wi-Fi → ativar' },
+                { step: '1', text: 'Abra Configurações → toque na lupa e pesquise "Serviços de localização"' },
+                { step: '2', text: 'Abra Serviços de localização → Serviços de localização' },
+                { step: '3', text: 'Ative "Precisão de localização" e "Procura de Wi-Fi" (estão na mesma tela)' },
               ].map(({ step, text }) => (
                 <li key={step} className="flex gap-2 text-xs text-amber-900">
                   <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center flex-shrink-0 text-[9px]">{step}</span>

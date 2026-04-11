@@ -382,16 +382,16 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putBoolean("gps_setup_shown", true).apply()
 
         val message = """
-            Para o rastreamento de localização funcionar corretamente, ative as seguintes opções:
+            Para o rastreamento de localização funcionar corretamente:
 
-            1️⃣  Configurações → Localização
-               Ative o toggle principal de localização
+            1️⃣  Abra Configurações
+               Toque na lupa 🔍 e pesquise "Serviços de localização"
 
-            2️⃣  Localização → Serviços de localização
-               → Precisão de localização do Google → ATIVAR
+            2️⃣  Abra Serviços de localização → Serviços de localização
 
-            3️⃣  Configurações → Wi-Fi → ⋮ (menu)
-               → Procura de Wi-Fi → ATIVAR
+            3️⃣  Ative as duas opções na mesma tela:
+               • Precisão de localização
+               • Procura de Wi-Fi
 
             Feito uma vez — não precisa repetir.
         """.trimIndent()
