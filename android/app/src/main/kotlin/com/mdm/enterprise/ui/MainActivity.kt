@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
 
         updateUI()
         observeInstallProgress()
+        showGpsSetupDialogIfNeeded()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -364,5 +365,42 @@ class MainActivity : AppCompatActivity() {
                 if (allDone) PackageInstalledReceiver.processPendingShortcuts(this@MainActivity)
             }
         }
+    }
+
+    /**
+     * Shows a one-time dialog guiding the IT admin to enable GPS settings
+     * required for location tracking. Shown only once after enrollment.
+     */
+    private fun showGpsSetupDialogIfNeeded() {
+        val prefs = getSharedPreferences("mdm_setup", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("gps_setup_shown", false)) return
+
+        // Only show if device is enrolled
+        val enrolled = SecurePreferences.getInstance(this).getStr("device_token") != null
+        if (!enrolled) return
+
+        prefs.edit().putBoolean("gps_setup_shown", true).apply()
+
+        val message = """
+            Para o rastreamento de localização funcionar corretamente, ative as seguintes opções:
+
+            1️⃣  Configurações → Localização
+               Ative o toggle principal de localização
+
+            2️⃣  Localização → Serviços de localização
+               → Precisão de localização do Google → ATIVAR
+
+            3️⃣  Configurações → Wi-Fi → ⋮ (menu)
+               → Procura de Wi-Fi → ATIVAR
+
+            Feito uma vez — não precisa repetir.
+        """.trimIndent()
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("⚙️ Configuração de GPS")
+            .setMessage(message)
+            .setPositiveButton("Entendido") { d, _ -> d.dismiss() }
+            .setCancelable(false)
+            .show()
     }
 }

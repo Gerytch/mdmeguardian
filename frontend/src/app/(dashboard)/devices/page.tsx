@@ -327,6 +327,35 @@ export default function DevicesPage() {
                   <span>Aponte a câmera para este QR — o dispositivo será cadastrado automaticamente</span>
                 </li>
               </ol>
+
+              {/* Mini tutorial GPS */}
+              <details className="mt-4 rounded-lg border border-amber-200 bg-amber-50 text-xs">
+                <summary className="flex items-center gap-2 px-3 py-2.5 cursor-pointer font-medium text-amber-800 select-none">
+                  <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Configurar rastreamento GPS (obrigatório)
+                </summary>
+                <div className="px-3 pb-3 pt-1 space-y-2 text-amber-900">
+                  <p className="text-[11px] text-amber-700">Após instalar o APK, ative estas opções no celular:</p>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center flex-shrink-0 text-[9px]">1</span>
+                      <span><strong>Configurações → Localização</strong> → ativar o toggle principal</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center flex-shrink-0 text-[9px]">2</span>
+                      <span><strong>Localização → Serviços de localização → Precisão de localização do Google</strong> → ativar</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center flex-shrink-0 text-[9px]">3</span>
+                      <span><strong>Configurações → Wi-Fi → ⋮ → Procura de Wi-Fi</strong> → ativar</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-amber-600 mt-1">Feito uma vez — não precisa repetir.</p>
+                </div>
+              </details>
             </div>
 
             {/* Footer */}
