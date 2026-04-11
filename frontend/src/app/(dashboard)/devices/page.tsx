@@ -21,6 +21,8 @@ export default function DevicesPage() {
   const [agentError, setAgentError] = useState('')
   const [agentTargetAll, setAgentTargetAll] = useState(true)
   const [agentSelectedIds, setAgentSelectedIds] = useState<string[]>([])
+  const [showConfirmAll, setShowConfirmAll] = useState(false)
+  const [agentApkLoading, setAgentApkLoading] = useState(false)
   const agentFileRef = useRef<HTMLInputElement>(null)
 
   const tenantId = getTenantId()
@@ -65,6 +67,18 @@ export default function DevicesPage() {
     }
   }
 
+  const openUpdateAgent = async () => {
+    setShowUpdateAgent(true)
+    if (!tenantId) return
+    setAgentApkLoading(true)
+    try {
+      const res = await appsApi.getAgentApk(tenantId)
+      if (res.data?.apkUrl) setAgentApkUrl(res.data.apkUrl)
+      if (res.data?.version) setAgentVersion(res.data.version)
+    } catch { /* ignore — user can still upload manually */ }
+    finally { setAgentApkLoading(false) }
+  }
+
   const closeUpdateAgent = () => {
     setShowUpdateAgent(false)
     setAgentApkUrl('')
@@ -73,6 +87,7 @@ export default function DevicesPage() {
     setAgentError('')
     setAgentTargetAll(true)
     setAgentSelectedIds([])
+    setShowConfirmAll(false)
     if (agentFileRef.current) agentFileRef.current.value = ''
   }
 
@@ -92,7 +107,7 @@ export default function DevicesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowUpdateAgent(true)}
+            onClick={openUpdateAgent}
             className="border border-indigo-300 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,27 +157,29 @@ export default function DevicesPage() {
                   {/* APK Upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">APK do Agente</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="URL do APK ou faça upload →"
-                        value={agentApkUrl}
-                        onChange={e => setAgentApkUrl(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                      />
-                      <label className={`px-3 py-2 border rounded-lg text-sm font-medium cursor-pointer transition-colors ${agentUploading ? 'bg-gray-100 text-gray-400' : 'border-indigo-300 text-indigo-700 hover:bg-indigo-50'}`}>
-                        {agentUploading ? '...' : 'Upload'}
-                        <input
-                          ref={agentFileRef}
-                          type="file"
-                          accept=".apk"
-                          className="hidden"
-                          disabled={agentUploading}
-                          onChange={e => e.target.files?.[0] && handleAgentApkUpload(e.target.files[0])}
-                        />
-                      </label>
-                    </div>
-                    {agentApkUrl && <p className="text-xs text-green-600 mt-1 truncate">✓ {agentApkUrl}</p>}
+                    {agentApkLoading ? (
+                      <p className="text-xs text-gray-400">Carregando APK armazenado...</p>
+                    ) : agentApkUrl ? (
+                      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                        <p className="text-xs text-green-700 truncate flex-1">✓ APK armazenado: {agentApkUrl.split('/').pop()}</p>
+                        <label className="ml-2 text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium flex-shrink-0">
+                          Trocar
+                          <input ref={agentFileRef} type="file" accept=".apk" className="hidden" disabled={agentUploading}
+                            onChange={e => e.target.files?.[0] && handleAgentApkUpload(e.target.files[0])} />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="Faça upload do APK →" value={agentApkUrl}
+                          onChange={e => setAgentApkUrl(e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <label className={`px-3 py-2 border rounded-lg text-sm font-medium cursor-pointer transition-colors ${agentUploading ? 'bg-gray-100 text-gray-400' : 'border-indigo-300 text-indigo-700 hover:bg-indigo-50'}`}>
+                          {agentUploading ? '...' : 'Upload'}
+                          <input ref={agentFileRef} type="file" accept=".apk" className="hidden" disabled={agentUploading}
+                            onChange={e => e.target.files?.[0] && handleAgentApkUpload(e.target.files[0])} />
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Versão */}
@@ -214,7 +231,7 @@ export default function DevicesPage() {
                   <div className="flex gap-2 pt-1">
                     <button onClick={closeUpdateAgent} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
                     <button
-                      onClick={handleDispatchAgentUpdate}
+                      onClick={() => agentTargetAll ? setShowConfirmAll(true) : handleDispatchAgentUpdate()}
                       disabled={agentDispatching || !agentApkUrl.trim() || !agentVersion.trim() || (!agentTargetAll && agentSelectedIds.length === 0)}
                       className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
                     >
@@ -223,6 +240,45 @@ export default function DevicesPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup de confirmação — atualizar TODOS */}
+      {showConfirmAll && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Atenção — Todos os dispositivos</h4>
+                <p className="text-xs text-gray-400 mt-0.5">Esta ação afeta {devices.length} dispositivo{devices.length !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700">
+              Você está prestes a enviar a atualização <strong className="text-indigo-700">{agentVersion}</strong> para <strong>todos</strong> os dispositivos deste ambiente.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              Verifique se você está no ambiente correto (<strong>homologação</strong> ou <strong>produção</strong>) antes de continuar.
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowConfirmAll(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowConfirmAll(false); handleDispatchAgentUpdate() }}
+                className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700"
+              >
+                Confirmar e Despachar
+              </button>
             </div>
           </div>
         </div>

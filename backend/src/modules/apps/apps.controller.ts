@@ -150,9 +150,16 @@ export class AppsController {
   ): Promise<{ apkUrl: string; originalName: string; sizeBytes: number } & ApkMeta> {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
     const meta = await extractApkMeta(file.path);
+    const apkUrl = `/uploads/apks/${file.filename}`;
     this.logger.log(`APK uploaded: ${file.filename} — pkg=${meta.packageName} ver=${meta.versionName}`);
+
+    // Auto-save agent APK so the Update Agent modal can pre-fill without manual URL paste
+    if (meta.packageName?.startsWith('com.mdm.enterprise') && meta.versionName) {
+      await this.appsService.upsertAgentApk(tenantId, meta.packageName, meta.versionName, apkUrl, file.size);
+    }
+
     return {
-      apkUrl: `/uploads/apks/${file.filename}`,
+      apkUrl,
       originalName: file.originalname,
       sizeBytes: file.size,
       ...meta,
@@ -166,6 +173,12 @@ export class AppsController {
     @Body() dto: CreateAppDto,
   ): Promise<App> {
     return this.appsService.create(tenantId, dto);
+  }
+
+  /** Returns the current E.Guardian agent APK stored for this tenant. */
+  @Get('agent')
+  getAgentApk(@Param('tenantId', ParseUUIDPipe) tenantId: string) {
+    return this.appsService.getAgentApk(tenantId);
   }
 
   @Get()

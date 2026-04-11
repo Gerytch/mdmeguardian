@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 import { App } from './entities/app.entity';
 import { Device } from '../devices/entities/device.entity';
 import { Command, CommandStatus, CommandType } from '../commands/entities/command.entity';
@@ -118,6 +118,42 @@ export class AppsService {
       );
       await this.commandRepository.save(commands);
     }
+  }
+
+  /** Returns the most recently uploaded E.Guardian agent APK for this tenant. */
+  async getAgentApk(tenantId: string): Promise<App | null> {
+    return this.appRepository.findOne({
+      where: { tenantId, packageName: Like('com.mdm.enterprise%') },
+      order: { updatedAt: 'DESC' },
+    });
+  }
+
+  /** Upserts the agent app record after an APK upload. */
+  async upsertAgentApk(
+    tenantId: string,
+    packageName: string,
+    version: string,
+    apkUrl: string,
+    sizeBytes?: number,
+  ): Promise<App> {
+    const existing = await this.appRepository.findOne({ where: { tenantId, packageName } });
+    if (existing) {
+      existing.version = version;
+      existing.apkUrl = apkUrl;
+      if (sizeBytes) existing.sizeBytes = sizeBytes;
+      return this.appRepository.save(existing);
+    }
+    return this.appRepository.save(
+      this.appRepository.create({
+        tenantId,
+        packageName,
+        name: 'E.Guardian MDM Agent',
+        version,
+        apkUrl,
+        sizeBytes: sizeBytes ?? null,
+        isSystem: true,
+      }),
+    );
   }
 
   async getRequired(tenantId: string): Promise<App[]> {

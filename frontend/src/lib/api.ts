@@ -86,6 +86,7 @@ export const appsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  getAgentApk: (tenantId: string) => api.get(`/tenants/${tenantId}/apps/agent`),
 }
 
 export const commandsApi = {
