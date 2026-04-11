@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.9.0] — 2026-04-11 — APK 1.5.0 (versionCode 29)
+
+### Summary
+Três novos features: deduplicação de pins no mapa de localização, endpoint DELETE para registros de geolocalização, e reporte assíncrono do resultado de instalação do UPDATE_AGENT. Adicionado popup de confirmação ao atualizar todos os dispositivos de uma vez.
+
+### Added
+- **[backend/geolocation.controller.ts]**: endpoint `DELETE /tenants/:tenantId/geolocation/:locationId` para remover registros de localização via API
+- **[backend/commands.service.ts + controller]**: endpoint `PATCH /device/commands/:id/install-result` — agent reporta resultado do install pós-restart sem alterar status do comando
+- **[android/CommandPollingService.kt]**: salva `{commandId, targetVersion, timestamp}` em SharedPrefs antes do install; `checkPendingAgentUpdate()` no restart compara versionName atual com target e reporta sucesso ou falha
+- **[android/ApiModels.kt + MdmApiClient.kt]**: `InstallResultRequest` + `reportInstallResult()` na interface Retrofit
+- **[frontend/devices/page.tsx]**: popup de confirmação âmbar ao despachar UPDATE_AGENT para todos os dispositivos (alerta de ambiente homologação/produção)
+- **[frontend/devices/[id]/page.tsx]**: badge de resultado na lista de comandos UPDATE_AGENT: "Instalando..." / "✓ Instalado vX.Y.Z" / "✗ Falha"
+
+### Fixed
+- **[backend/geolocation.service.ts]**: substituído `MAX+JOIN` por `DISTINCT ON (deviceId) ORDER BY timestamp DESC` — eliminava pins duplicados quando dois registros tinham o mesmo timestamp
+- **[frontend/dashboard/page.tsx]**: deduplicação por deviceId no frontend como camada de segurança extra
+
+### Decisions
+- Resultado do UPDATE_AGENT é reportado via endpoint separado (não no ACK) pois o app é morto durante a auto-atualização; SharedPrefs persiste o commandId entre processos
+- Timeout de 5 minutos: se após 5 min a versão ainda não bate, reporta falha automaticamente
+
+---
+
 ## [0.8.0] — 2026-04-11 — APK 1.4.2 (versionCode 28)
 
 ### Summary
