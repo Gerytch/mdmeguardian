@@ -85,10 +85,10 @@ class LocationTrackingWorker(
             val location = Tasks.await(
                 fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null),
                 15, TimeUnit.SECONDS,
-            )
+            ) ?: Tasks.await(fusedClient.lastLocation, 5, TimeUnit.SECONDS)
 
             if (location == null) {
-                Log.w(TAG, "Location is null, retrying")
+                Log.w(TAG, "Location is null (no fix available), retrying")
                 return@withContext Result.retry()
             }
 
