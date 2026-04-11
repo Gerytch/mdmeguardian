@@ -96,21 +96,16 @@ export class GeolocationService {
   }
 
   async getAllDevicesLatestLocations(tenantId: string): Promise<Location[]> {
+    // DISTINCT ON guarantees exactly one row per device (the most recent by timestamp).
+    // The previous MAX+JOIN approach returned duplicate rows when two records shared the same timestamp.
     return this.locationRepository
       .createQueryBuilder('loc')
-      .innerJoin(
-        (qb) =>
-          qb
-            .select('l.deviceId', 'deviceId')
-            .addSelect('MAX(l.timestamp)', 'maxTs')
-            .from(Location, 'l')
-            .where('l.tenantId = :tenantId', { tenantId })
-            .groupBy('l.deviceId'),
-        'latest',
-        'latest."deviceId" = loc.deviceId AND latest."maxTs" = loc.timestamp',
-      )
+      .distinctOn(['loc.deviceId'])
       .leftJoinAndSelect('loc.device', 'device')
       .where('loc.tenantId = :tenantId', { tenantId })
+      .orderBy('loc.deviceId')
+      .addOrderBy('loc.timestamp', 'DESC')
+      .setParameter('tenantId', tenantId)
       .getMany();
   }
 

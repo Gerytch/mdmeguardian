@@ -176,7 +176,14 @@ export default function DashboardPage() {
     ]).then(([d, c, l, s]) => {
       setDevices(d.data)
       setCommands(c.data)
-      setLocations(l.data)
+      // Deduplicate by deviceId — keep the most-recent entry per device
+      const seen = new Set<string>()
+      const deduped = (Array.isArray(l.data) ? l.data : []).filter((loc: any) => {
+        if (seen.has(loc.deviceId)) return false
+        seen.add(loc.deviceId)
+        return true
+      })
+      setLocations(deduped)
       const raw = s.data
       const rows: SessionRow[] = Array.isArray(raw) ? raw : (raw?.data ?? raw?.sessions ?? [])
       setSessions(rows.map((r: any) => ({
