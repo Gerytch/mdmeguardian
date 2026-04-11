@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.8.0] — 2026-04-11 — APK 1.4.2 (versionCode 28)
+
+### Summary
+Fix completo do rastreamento de GPS em dispositivos físicos Samsung. Reescrita do LocationTrackingWorker para usar coroutines nativas em vez de Tasks.await(). Estratégia de 4 camadas para obter localização. Auto-ativação de GPS via Device Owner. Tutorial de configuração no app Android e na página de enrollment do frontend.
+
+### Fixed
+- **[android/LocationTrackingWorker]**: `Tasks.await()` causava `TimeoutException` em contexto de coroutine — substituído por `suspendCancellableCoroutine` + `addOnSuccessListener`
+- **[android/LocationTrackingWorker]**: `getCurrentLocation()` retornava null em cold start/indoor — adicionado `requestLocationUpdates` (ativo, acorda o hardware GPS) como fallback
+- **[android/MdmPolicyService]**: `LOCATION_MODE` deprecated no Android 9+ — substituído por `dpm.setLocationEnabled(adminComponent, true)` (API 28+)
+
+### Added
+- **[android/LocationTrackingWorker]**: Estratégia de 4 camadas: `lastLocation` → BALANCED ativo → HIGH_ACCURACY ativo → `LocationManager` nativo (bypass GMS)
+- **[android/MdmPolicyService]**: `setLocationEnabled()` auto-ativado via Device Owner quando `locationTracking = true`
+- **[android/MainActivity]**: Dialog de configuração GPS exibido uma vez após enrollment — guia o T.I. para ativar "Precisão de localização" e "Procura de Wi-Fi" em Serviços de localização
+- **[frontend/enroll]**: Card âmbar com tutorial de 3 passos para configuração GPS na página `/enroll`
+- **[frontend/devices]**: Botão "Adicionar Dispositivo" agora redireciona para `/enroll` — modal de QR removido (enrollment centralizado em `/enroll`)
+
+---
+
 ## [0.7.0] — 2026-04-10 — APK 1.3.3 (versionCode 19)
 
 ### Summary
