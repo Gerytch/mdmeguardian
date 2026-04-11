@@ -82,7 +82,11 @@ export const appsApi = {
   uploadApk: (tenantId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post(`/tenants/${tenantId}/apps/upload`, form)
+    // Content-Type: undefined removes the axios default 'application/json'
+    // so the browser sets 'multipart/form-data; boundary=...' automatically
+    return api.post(`/tenants/${tenantId}/apps/upload`, form, {
+      headers: { 'Content-Type': undefined },
+    })
   },
   getAgentApk: (tenantId: string) => api.get(`/tenants/${tenantId}/apps/agent`),
 }
