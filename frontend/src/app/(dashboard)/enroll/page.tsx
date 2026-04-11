@@ -172,6 +172,31 @@ export default function EnrollPage() {
             </a>
           </div>
 
+          {/* GPS Setup Tutorial */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Configuração de GPS (obrigatório)
+            </p>
+            <p className="text-xs text-amber-700 mb-3">Ative estas opções no celular após instalar o APK:</p>
+            <ol className="space-y-2">
+              {[
+                { step: '1', text: 'Configurações → Localização → ativar o toggle principal' },
+                { step: '2', text: 'Localização → Serviços de localização → Precisão de localização do Google → ativar' },
+                { step: '3', text: 'Configurações → Wi-Fi → ⋮ → Procura de Wi-Fi → ativar' },
+              ].map(({ step, text }) => (
+                <li key={step} className="flex gap-2 text-xs text-amber-900">
+                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-800 font-bold flex items-center justify-center flex-shrink-0 text-[9px]">{step}</span>
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="text-[11px] text-amber-600 mt-2">Feito uma vez — não precisa repetir.</p>
+          </div>
+
           {/* Server info */}
           <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
             <p className="text-xs font-medium text-gray-500 mb-1">Servidor configurado</p>
