@@ -82,13 +82,28 @@ class LocationTrackingWorker(
 
         try {
             val fusedClient = LocationServices.getFusedLocationProviderClient(applicationContext)
-            val location = Tasks.await(
+
+            // 1st try: GPS high accuracy (may be null indoors / cold start)
+            var location = Tasks.await(
                 fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null),
                 15, TimeUnit.SECONDS,
-            ) ?: Tasks.await(fusedClient.lastLocation, 5, TimeUnit.SECONDS)
+            )
+            // 2nd try: last known location from any app
+            if (location == null) {
+                Log.w(TAG, "getCurrentLocation returned null, trying lastLocation")
+                location = Tasks.await(fusedClient.lastLocation, 5, TimeUnit.SECONDS)
+            }
+            // 3rd try: balanced (WiFi/cell) — works indoors without GPS
+            if (location == null) {
+                Log.w(TAG, "lastLocation null, trying BALANCED_POWER_ACCURACY")
+                location = Tasks.await(
+                    fusedClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
+                    15, TimeUnit.SECONDS,
+                )
+            }
 
             if (location == null) {
-                Log.w(TAG, "Location is null (no fix available), retrying")
+                Log.w(TAG, "All location strategies failed, retrying later")
                 return@withContext Result.retry()
             }
 
