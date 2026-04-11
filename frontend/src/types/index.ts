@@ -44,7 +44,7 @@ export interface Command {
   id: string
   tenantId: string
   deviceId: string
-  type: 'LOCK' | 'UNLOCK' | 'WIPE' | 'REBOOT' | 'INSTALL_APP' | 'UNINSTALL_APP' | 'UPDATE_POLICY' | 'ENABLE_KIOSK' | 'DISABLE_KIOSK' | 'LOCATE'
+  type: 'LOCK' | 'UNLOCK' | 'WIPE' | 'REBOOT' | 'INSTALL_APP' | 'UNINSTALL_APP' | 'UPDATE_POLICY' | 'ENABLE_KIOSK' | 'DISABLE_KIOSK' | 'LOCATE' | 'UPDATE_AGENT' | 'ADMIN_LOCK' | 'ADMIN_UNLOCK' | 'NETWORK_TEST' | 'UNINSTALL_AGENT'
   payload: Record<string, any>
   status: 'PENDING' | 'SENT' | 'EXECUTING' | 'EXECUTED' | 'FAILED'
   createdBy: string
