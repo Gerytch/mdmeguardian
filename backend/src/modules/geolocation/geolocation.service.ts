@@ -109,6 +109,12 @@ export class GeolocationService {
       .getMany();
   }
 
+  async deleteLocation(tenantId: string, locationId: string): Promise<void> {
+    const loc = await this.locationRepository.findOne({ where: { id: locationId, tenantId } });
+    if (!loc) throw new NotFoundException(`Location "${locationId}" not found`);
+    await this.locationRepository.remove(loc);
+  }
+
   async getGeofenceAlerts(tenantId: string, since?: Date): Promise<Location[]> {
     const where: any = { tenantId, isGeofenceAlert: true };
     if (since) where.timestamp = MoreThanOrEqual(since);

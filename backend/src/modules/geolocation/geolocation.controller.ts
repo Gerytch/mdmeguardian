@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   ParseUUIDPipe,
@@ -43,6 +44,16 @@ export class GeolocationController {
     @Query('since') since?: string,
   ): Promise<Location[]> {
     return this.geolocationService.getGeofenceAlerts(tenantId, since ? new Date(since) : undefined);
+  }
+
+  /** Delete a specific location record by id */
+  @Delete(':locationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteLocation(
+    @Param('tenantId', ParseUUIDPipe) tenantId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ): Promise<void> {
+    return this.geolocationService.deleteLocation(tenantId, locationId);
   }
 
   /** Latest location for a specific device */
