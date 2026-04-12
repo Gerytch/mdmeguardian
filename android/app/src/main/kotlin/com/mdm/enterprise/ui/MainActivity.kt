@@ -22,6 +22,7 @@ import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.MdmApiClient
 import com.mdm.enterprise.api.models.AppInfo
 import com.mdm.enterprise.api.models.SyncAppsRequest
+import com.mdm.enterprise.api.models.EnrollDeviceRequest
 import com.mdm.enterprise.provisioning.QrProvisioningActivity
 import com.mdm.enterprise.services.CommandPollingService
 import com.mdm.enterprise.services.CommandPollingWorker
@@ -41,6 +42,8 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         // Dev-mode enrollment intent action — used by ADB for emulator testing
         const val ACTION_DEV_ENROLL = "com.mdm.enterprise.DEV_ENROLL"
+        // Production ADB enrollment — calls real API, same as QR flow
+        const val ACTION_ADB_ENROLL = "com.mdm.enterprise.ADB_ENROLL"
     }
 
     private lateinit var dpm: DevicePolicyManager
@@ -67,6 +70,8 @@ class MainActivity : AppCompatActivity() {
 
         // Handle dev-mode enrollment from ADB intent extras
         handleDevEnrollIntent(intent)
+        // Handle production ADB enrollment (calls real API)
+        if (intent?.action == ACTION_ADB_ENROLL) handleAdbEnrollIntent(intent)
 
         updateUI()
         observeInstallProgress()
@@ -76,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleDevEnrollIntent(intent)
+        if (intent.action == ACTION_ADB_ENROLL) handleAdbEnrollIntent(intent)
         updateUI()
     }
 
@@ -164,6 +170,99 @@ class MainActivity : AppCompatActivity() {
 
         Toast.makeText(this, "✓ Cadastro dev concluído!", Toast.LENGTH_LONG).show()
         Log.i(TAG, "Dev enrollment saved. Workers started.")
+    }
+
+    /**
+     * Production ADB enrollment — calls the real enrollWithToken API (same as QR flow).
+     * Usage (after adb install + set-device-owner):
+     *   adb shell am start \
+     *     -n "com.mdm.enterprise.homolog/com.mdm.enterprise.ui.MainActivity" \
+     *     -a "com.mdm.enterprise.ADB_ENROLL" \
+     *     --es enrollment_token "TOKEN_FROM_DASHBOARD" \
+     *     --es server_url "https://eg.expresso3300.com.br/api/v1" \
+     *     --es tenant_id "TENANT_UUID"
+     */
+    private fun handleAdbEnrollIntent(intent: Intent?) {
+        val enrollmentToken = intent?.getStringExtra("enrollment_token") ?: return
+        val serverUrl = intent.getStringExtra("server_url") ?: return
+        val tenantId = intent.getStringExtra("tenant_id") ?: return
+
+        Log.i(TAG, "ADB enrollment: tenantId=$tenantId serverUrl=$serverUrl")
+        Toast.makeText(this, "Cadastrando dispositivo...", Toast.LENGTH_SHORT).show()
+
+        // Pre-configure server URL so MdmApiClient builds with the correct base
+        val prefs = SecurePreferences.getInstance(this)
+        prefs.edit().putString("server_url", serverUrl).apply()
+        MdmApiClient.reset()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val androidId = android.provider.Settings.Secure.getString(
+                    contentResolver, android.provider.Settings.Secure.ANDROID_ID
+                )
+                val api = MdmApiClient.getInstance(this@MainActivity)
+                val response = api.enrollWithToken(
+                    tenantId,
+                    EnrollDeviceRequest(
+                        enrollmentToken = enrollmentToken,
+                        name = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+                        serialNumber = androidId,
+                        manufacturer = android.os.Build.MANUFACTURER,
+                        model = android.os.Build.MODEL,
+                        androidVersion = android.os.Build.VERSION.RELEASE,
+                        policyId = null,
+                    )
+                )
+
+                // Persist credentials — same fields as QrProvisioningActivity
+                prefs.edit()
+                    .putString("device_id", response.id)
+                    .putString("device_token", response.deviceToken)
+                    .putString("tenant_id", tenantId)
+                    .putString("server_url", serverUrl)
+                    .putBoolean("is_enrolled", true)
+                    .apply()
+
+                MdmApiClient.reset()
+
+                // Start polling services
+                CommandPollingService.stop(this@MainActivity)
+                CommandPollingService.start(this@MainActivity)
+                CommandPollingWorker.schedule(this@MainActivity)
+                LocationTrackingWorker.schedule(this@MainActivity)
+
+                // Sync app catalog (fire-and-forget)
+                try {
+                    val pm = packageManager
+                    val launchIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
+                    @Suppress("DEPRECATION")
+                    val apps = pm.queryIntentActivities(launchIntent, 0)
+                        .mapNotNull { it.activityInfo?.packageName }
+                        .filter { it != packageName }
+                        .distinct()
+                        .map { pkg ->
+                            val label = try {
+                                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                            } catch (_: Exception) { pkg }
+                            com.mdm.enterprise.api.models.AppInfo(packageName = pkg, name = label)
+                        }
+                    api.syncApps(response.deviceToken, com.mdm.enterprise.api.models.SyncAppsRequest(apps))
+                } catch (e: Exception) {
+                    Log.w(TAG, "App catalog sync failed (non-critical): ${e.message}")
+                }
+
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "✓ Dispositivo cadastrado com sucesso!", Toast.LENGTH_LONG).show()
+                    updateUI()
+                }
+                Log.i(TAG, "ADB enrollment complete. deviceId=${response.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "ADB enrollment failed: ${e.message}", e)
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Erro no cadastro: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun updateUI() {

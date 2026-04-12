@@ -18,6 +18,7 @@ export default function EnrollPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [provisioningQr, setProvisioningQr] = useState<string | null>(null)
+  const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null)
   const tenantId = getTenantId()
 
   const generate = useCallback(async () => {
@@ -27,7 +28,9 @@ export default function EnrollPage() {
     try {
       const res = await devicesApi.generateEnrollmentToken(tenantId)
       const { qrPayload, expiresAt: exp } = res.data
-      const payload = JSON.stringify({ ...JSON.parse(qrPayload), serverUrl: BASE_URL })
+      const parsed = JSON.parse(qrPayload)
+      setEnrollmentToken(parsed.enrollmentToken ?? null)
+      const payload = JSON.stringify({ ...parsed, serverUrl: BASE_URL })
       const dataUrl = await QRCode.toDataURL(payload, {
         width: 280,
         margin: 2,
@@ -285,10 +288,35 @@ export default function EnrollPage() {
               <p className="text-green-400">adb shell dpm set-device-owner com.mdm.enterprise.homolog/com.mdm.enterprise.admin.MdmDeviceAdminReceiver</p>
             </div>
             <div className="border-t border-gray-700 pt-3">
-              <p className="text-gray-500 text-[10px] mb-1"># Após instalar — abra o app e escaneie o QR Code de Enrollment acima</p>
               <p className="text-amber-400">⚠ O device não pode ter conta Google configurada para o Device Owner funcionar.</p>
             </div>
           </div>
+        </div>
+
+        {/* ADB Enrollment Command — auto-populated token */}
+        <div className="mt-6">
+          <h3 className="text-base font-bold text-gray-900 mb-1">4. Enrollar via ADB (uma linha — sem abrir o app)</h3>
+          <p className="text-sm text-gray-500 mb-3">
+            Com o Device Owner configurado, execute o comando abaixo para enrollar o dispositivo diretamente pelo terminal.
+            O token é o mesmo do QR acima — válido por 1 hora.
+          </p>
+          <div className="bg-gray-900 rounded-xl p-5 text-xs font-mono text-gray-100">
+            {enrollmentToken && tenantId ? (
+              <div className="space-y-1">
+                <p className="text-gray-500 text-[10px] mb-2"># Enrollar dispositivo pelo terminal (copie e cole tudo)</p>
+                <p className="text-green-400 break-all leading-relaxed select-all">
+                  {`adb shell am start -n "com.mdm.enterprise.homolog/com.mdm.enterprise.ui.MainActivity" -a "com.mdm.enterprise.ADB_ENROLL" --es enrollment_token "${enrollmentToken}" --es server_url "${BASE_URL}/api/v1" --es tenant_id "${tenantId}"`}
+                </p>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-[10px] animate-pulse">Aguardando geração do token...</p>
+            )}
+          </div>
+          {enrollmentToken && (
+            <p className="text-[11px] text-gray-400 mt-2">
+              Token expira às <span className="font-medium text-gray-600">{expiryStr ?? '...'}</span> — regenerado automaticamente junto com o QR.
+            </p>
+          )}
         </div>
 
         <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
