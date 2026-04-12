@@ -55,11 +55,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Setar como Device Owner (obrigatório para kiosk/admin lock)
 adb shell dpm set-device-owner com.mdm.enterprise.debug/com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 
-# Enrollment via dev mode
+# Enrollment via dev mode (apenas emuladores locais)
 adb shell am start -n "com.mdm.enterprise.debug/com.mdm.enterprise.ui.MainActivity" \
   -a DEV_ENROLL \
   --es dev_device_token "TOKEN_DO_DEVICE" \
   --es dev_api_url "http://10.0.2.2:3001"
+
+# Enrollment via ADB — PRODUÇÃO/HOMOLOG (fluxo real, chama API enrollWithToken)
+# 1. adb install -r app-homolog.apk
+# 2. adb shell dpm set-device-owner com.mdm.enterprise.homolog/com.mdm.enterprise.admin.MdmDeviceAdminReceiver
+# 3. Copiar comando gerado automaticamente em https://eg.expresso3300.com.br/enroll (seção "Enrollar via ADB")
+#    O token é preenchido automaticamente — válido 1h, renovado junto com o QR
+adb shell am start -n "com.mdm.enterprise.homolog/com.mdm.enterprise.ui.MainActivity" \
+  -a "com.mdm.enterprise.ADB_ENROLL" \
+  --es enrollment_token "TOKEN_DA_PAGINA_ENROLL" \
+  --es server_url "https://eg.expresso3300.com.br/api/v1" \
+  --es tenant_id "TENANT_UUID"
 ```
 
 ---

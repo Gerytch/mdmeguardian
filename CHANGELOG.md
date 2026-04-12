@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.10.0] — 2026-04-12 — APK 1.6.0 (versionCode 30)
+
+### Summary
+Novo fluxo de enrollment via ADB para T.I. com terminal aberto. O técnico executa um único comando `adb shell am start` após o `set-device-owner` e o device entra no sistema automaticamente — sem abrir o app, sem escanear QR. Testado e validado em Samsung SM-A156M (factory reset → adb install → set-device-owner → ADB_ENROLL → Online em <10s).
+
+### Added
+- **android/MainActivity.kt**: `ACTION_ADB_ENROLL` — novo intent handler que chama a API real `enrollWithToken` (mesmo fluxo do QR). Lê `enrollment_token`, `server_url`, `tenant_id` das extras, configura o cliente de API, executa o enrollment em coroutine, salva credenciais e inicia polling. Toast de feedback em cada etapa.
+- **frontend/enroll/page.tsx**: seção "4. Enrollar via ADB" — comando `adb shell am start` completo com token, server_url e tenant_id já preenchidos automaticamente. Token é o mesmo do QR (1h de validade, renovado automaticamente). Selecionável para copiar com um clique.
+
+### Decisions
+- `ACTION_ADB_ENROLL` usa a mesma API do QR (`enrollWithToken`) — não é atalho dev, é o fluxo real de produção. Isso garante que o device recebe `device_id`, `device_token` e aparece no dashboard como qualquer outro.
+- O token exposto no frontend é o enrollment token (one-time, expira em 1h) — não é segredo crítico, é o mesmo que o QR code expõe visualmente.
+
+---
+
 ## [0.9.2] — 2026-04-12 — APK 1.5.0 (versionCode 29) — PRODUÇÃO
 
 ### Summary
