@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.9.1] — 2026-04-12 — APK 1.5.0 (sem mudança Android)
+
+### Summary
+Sessão de validação e QA do ambiente de homologação. Confirmado que GPS e atualização remota de agente (UPDATE_AGENT) funcionam de ponta a ponta no dispositivo físico (Samsung SM-A156M). Esta etapa foi crucial para liberar o sistema para mais dispositivos em produção.
+
+### Added
+- **[qa/tests/update-agent-e2e.spec.js]**: teste Playwright E2E completo do fluxo UPDATE_AGENT — login → upload APK → preencher versão → confirmar despacho → validar UI "Atualização despachada" → validar instalação silenciosa via logcat ADB
+- **[qa/tests/debug-upload-apk.spec.js]**: teste de diagnóstico de upload de APK (debug, pode ser removido)
+
+### Fixed
+- **[EC2 nginx /etc/nginx/sites-available/eguardian]**: adicionado `client_max_body_size 50m` — nginx bloqueava uploads de APK com HTTP 413 (APK do agente tem ~26MB)
+
+### Validated (sem mudança de código)
+- Upload de APK via frontend funciona em homolog (https://eg.expresso3300.com.br)
+- UPDATE_AGENT: device Samsung SM-A156M recebe comando, baixa 26MB, instala silenciosamente e reinicia o agente
+- GPS / localização: rastreamento funciona end-to-end em dispositivo físico
+- Campo `version` no payload UPDATE_AGENT chega corretamente no device (ex: `v9.9.9-test`)
+
+### Decisions
+- Testes QA de UPDATE_AGENT usam o APK homolog real (não dummy) para garantir instalação válida no device
+- Asserção do resultado via UI ("Atualização despachada!") em vez de interceptar HTTP — endpoint de despacho pode variar
+
+---
+
 ## [0.9.0] — 2026-04-11 — APK 1.5.0 (versionCode 29)
 
 ### Summary
