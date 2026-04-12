@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.9.2] — 2026-04-12 — APK 1.5.0 (versionCode 29) — PRODUÇÃO
+
+### Summary
+Encerramento da homologação e entrada em produção. Campo "Versão" no modal Atualizar Agente agora é preenchido automaticamente a partir do APK. Samsung SM-A156M atualizado de v1.4.2 para v1.5.0 via sistema, sem intervenção física. Identificado e corrigido o fluxo completo de UPDATE_AGENT end-to-end.
+
+### Added
+- **[backend/apps.controller.ts]**: `node-apk-parser` como extrator primário de metadados APK (cross-platform, sem aapt2) — `versionName`, `packageName` retornados no upload response; aapt2 mantido como fallback para `appLabel` em dev machines
+
+### Fixed
+- **[backend]**: campo `versionName` agora retornado no upload response do EC2/Linux — frontend auto-preenche campo Versão do modal UPDATE_AGENT
+- **[EC2 nginx]**: `client_max_body_size 50m` — resolvia HTTP 413 em uploads de APK ~26MB
+- **[processo]**: identificado que o install falhava por upload do APK debug (com.mdm.enterprise.debug) em vez do homolog — package name mismatch com Device Owner instalado
+
+### Validated em produção
+- Samsung SM-A156M: `com.mdm.enterprise.homolog` atualizado de 1.4.2 → 1.5.0 via UPDATE_AGENT pelo sistema ✅
+- GPS tracking: funciona end-to-end em dispositivo físico ✅
+- UPDATE_AGENT: fluxo completo validado (upload → versionName auto → dispatch → download → install silencioso → restart) ✅
+
+### Decisions
+- Para future devices: usar sempre o APK homolog no enrollment (nunca debug) — package names são incompatíveis para update remoto
+- Sistema encerrado em homologação e liberado para produção
+
+---
+
 ## [0.9.1] — 2026-04-12 — APK 1.5.0 (sem mudança Android)
 
 ### Summary
