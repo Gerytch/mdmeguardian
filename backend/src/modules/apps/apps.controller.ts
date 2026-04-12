@@ -22,6 +22,8 @@ import { mkdirSync, readdirSync, unlinkSync } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as unzipper from 'unzipper';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const APKReader = require('node-apk-parser');
 import { AppsService, CreateAppDto, UpdateAppDto } from './apps.service';
 import { App } from './entities/app.entity';
 
@@ -76,9 +78,6 @@ async function extractBaseApkFromXapk(xapkPath: string): Promise<string> {
 }
 
 async function extractApkMeta(apkPath: string): Promise<ApkMeta> {
-  const aapt2 = findAapt2();
-  if (!aapt2) return {};
-
   let pathToAnalyze = apkPath;
   let tempFile: string | null = null;
 
@@ -91,6 +90,22 @@ async function extractApkMeta(apkPath: string): Promise<ApkMeta> {
     }
   }
 
+  // Primary: pure-JS parser (works everywhere, no aapt2 required)
+  try {
+    const reader = APKReader.readFile(pathToAnalyze);
+    const manifest = reader.readManifestSync();
+    if (manifest?.package || manifest?.versionName) {
+      return {
+        packageName: manifest.package ?? undefined,
+        versionName: manifest.versionName ?? undefined,
+        appLabel: undefined,
+      };
+    }
+  } catch { /* fall through to aapt2 */ }
+
+  // Fallback: aapt2 (available on dev machines with Android SDK)
+  const aapt2 = findAapt2();
+  if (!aapt2) return {};
   try {
     const { stdout } = await execAsync(`"${aapt2}" dump badging "${pathToAnalyze}"`, { timeout: 10_000 });
     const packageMatch = stdout.match(/package: name='([^']+)'/);
