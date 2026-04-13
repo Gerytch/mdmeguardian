@@ -29,6 +29,9 @@ export class UsersService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const devicePinHash = dto.devicePin ? await bcrypt.hash(dto.devicePin, BCRYPT_ROUNDS) : null;
+    const deviceUsername = dto.deviceUsername?.trim() || (dto.canAccessDevices ? dto.email.split('@')[0] : null);
+
     const user = this.userRepository.create({
       tenantId,
       email: dto.email.toLowerCase().trim(),
@@ -37,10 +40,14 @@ export class UsersService {
       lastName: dto.lastName,
       role: dto.role ?? UserRole.VIEWER,
       isActive: true,
+      canAccessDevices: dto.canAccessDevices ?? false,
+      deviceUsername: deviceUsername ?? null,
+      devicePinHash,
     });
 
     const saved = await this.userRepository.save(user);
     delete (saved as any).passwordHash;
+    delete (saved as any).devicePinHash;
     return saved;
   }
 
@@ -48,14 +55,14 @@ export class UsersService {
     return this.userRepository.find({
       where: { tenantId },
       order: { createdAt: 'DESC' },
-      select: ['id', 'tenantId', 'email', 'firstName', 'lastName', 'role', 'isActive', 'lastLoginAt', 'createdAt', 'updatedAt'],
+      select: ['id', 'tenantId', 'email', 'firstName', 'lastName', 'role', 'isActive', 'canAccessDevices', 'deviceUsername', 'lastLoginAt', 'createdAt', 'updatedAt'],
     });
   }
 
   async findOne(tenantId: string, id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id, tenantId },
-      select: ['id', 'tenantId', 'email', 'firstName', 'lastName', 'role', 'isActive', 'lastLoginAt', 'createdAt', 'updatedAt'],
+      select: ['id', 'tenantId', 'email', 'firstName', 'lastName', 'role', 'isActive', 'canAccessDevices', 'deviceUsername', 'lastLoginAt', 'createdAt', 'updatedAt'],
     });
     if (!user) throw new NotFoundException(`User "${id}" not found`);
     return user;
@@ -84,7 +91,40 @@ export class UsersService {
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
     if (dto.role !== undefined) user.role = dto.role;
     if (dto.isActive !== undefined) user.isActive = dto.isActive;
-    return this.userRepository.save(user);
+    if (dto.canAccessDevices !== undefined) user.canAccessDevices = dto.canAccessDevices;
+    if (dto.deviceUsername !== undefined) user.deviceUsername = dto.deviceUsername?.trim() || null;
+    if (dto.devicePin !== undefined) {
+      user.devicePinHash = dto.devicePin ? await bcrypt.hash(dto.devicePin, BCRYPT_ROUNDS) : null;
+    }
+    const saved = await this.userRepository.save(user);
+    delete (saved as any).devicePinHash;
+    return saved;
+  }
+
+  async findAllWithDevicePinHash(tenantId: string): Promise<User[]> {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.devicePinHash')
+      .where('user.tenantId = :tenantId', { tenantId })
+      .andWhere('user.canAccessDevices = true')
+      .andWhere('user.isActive = true')
+      .andWhere('user.deviceUsername IS NOT NULL')
+      .andWhere('user.devicePinHash IS NOT NULL')
+      .getMany()
+  }
+
+  async findByDeviceCredentials(tenantId: string, username: string, pin: string): Promise<User | null> {
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.devicePinHash')
+      .where('user.tenantId = :tenantId', { tenantId })
+      .andWhere('user.canAccessDevices = true')
+      .andWhere('user.isActive = true')
+      .andWhere('user.deviceUsername = :username', { username })
+      .getOne();
+    if (!user || !user.devicePinHash) return null;
+    const valid = await bcrypt.compare(pin, user.devicePinHash);
+    return valid ? user : null;
   }
 
   async changePassword(tenantId: string, id: string, dto: ChangePasswordDto): Promise<void> {

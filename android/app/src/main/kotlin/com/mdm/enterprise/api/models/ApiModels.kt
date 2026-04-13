@@ -148,6 +148,7 @@ data class DeviceUserLoginResponse(
     val fullName: String,
     val jobTitle: String?,
     val photoUrl: String?,
+    val sessionType: String = "operational", // "operational" | "admin"
 )
 
 data class DeviceUserLogoutRequest(

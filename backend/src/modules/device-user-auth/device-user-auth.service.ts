@@ -1,8 +1,12 @@
 import { Injectable, UnauthorizedException, GoneException } from '@nestjs/common'
+import { randomUUID } from 'crypto'
 import { DeviceUsersService } from '../device-users/device-users.service'
 import { DeviceSessionsService } from '../device-sessions/device-sessions.service'
 import { DevicesService } from '../devices/devices.service'
+import { UsersService } from '../users/users.service'
 import { DeviceSessionStatus } from '../device-sessions/entities/device-session.entity'
+
+const ADMIN_SESSION_PREFIX = 'adm_'
 
 @Injectable()
 export class DeviceUserAuthService {
@@ -10,6 +14,7 @@ export class DeviceUserAuthService {
     private readonly deviceUsersService: DeviceUsersService,
     private readonly deviceSessionsService: DeviceSessionsService,
     private readonly devicesService: DevicesService,
+    private readonly usersService: UsersService,
   ) {}
 
   async loginDeviceUser(
@@ -22,29 +27,55 @@ export class DeviceUserAuthService {
     fullName: string
     jobTitle: string | null
     photoUrl: string | null
+    sessionType: 'operational' | 'admin'
   }> {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
 
-    const deviceUser = await this.deviceUsersService.validateCredentials(device.tenantId, username, pin)
+    // 1. Try operational user (device_users table)
+    let operationalUser: Awaited<ReturnType<DeviceUsersService['validateCredentials']>> | null = null
+    try {
+      operationalUser = await this.deviceUsersService.validateCredentials(device.tenantId, username, pin)
+    } catch (_) {
+      // not found or invalid credentials — will try IT admin below
+    }
 
+    if (operationalUser) {
+      await this.deviceSessionsService.closeActiveForDevice(device.tenantId, device.id, 'SUPERSEDED')
+      await this.deviceSessionsService.closeActiveForUser(device.tenantId, operationalUser.id, 'SUPERSEDED_OTHER_DEVICE')
+      const session = await this.deviceSessionsService.create(device.tenantId, device.id, operationalUser.id)
+      return {
+        sessionId: session.id,
+        deviceUserId: operationalUser.id,
+        fullName: operationalUser.fullName,
+        jobTitle: operationalUser.jobTitle,
+        photoUrl: operationalUser.photoUrl,
+        sessionType: 'operational',
+      }
+    }
+
+    // 2. Try IT admin user (users table with canAccessDevices=true)
+    const itUser = await this.usersService.findByDeviceCredentials(device.tenantId, username, pin)
+    if (!itUser) throw new UnauthorizedException('Invalid credentials')
+
+    // Admin sessions: close any active operational session but don't create a device_session record
     await this.deviceSessionsService.closeActiveForDevice(device.tenantId, device.id, 'SUPERSEDED')
-    await this.deviceSessionsService.closeActiveForUser(device.tenantId, deviceUser.id, 'SUPERSEDED_OTHER_DEVICE')
-
-    const session = await this.deviceSessionsService.create(device.tenantId, device.id, deviceUser.id)
 
     return {
-      sessionId: session.id,
-      deviceUserId: deviceUser.id,
-      fullName: deviceUser.fullName,
-      jobTitle: deviceUser.jobTitle,
-      photoUrl: deviceUser.photoUrl,
+      sessionId: ADMIN_SESSION_PREFIX + randomUUID(),
+      deviceUserId: itUser.id,
+      fullName: `${itUser.firstName} ${itUser.lastName}`,
+      jobTitle: null,
+      photoUrl: null,
+      sessionType: 'admin',
     }
   }
 
   async logoutDeviceUser(deviceToken: string, sessionId: string, reason?: string): Promise<void> {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
+
+    if (sessionId.startsWith(ADMIN_SESSION_PREFIX)) return // admin sessions not tracked in DB
 
     await this.deviceSessionsService.endSession(
       device.id,
@@ -57,6 +88,8 @@ export class DeviceUserAuthService {
   async timeoutSession(deviceToken: string, sessionId: string): Promise<void> {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
+
+    if (sessionId.startsWith(ADMIN_SESSION_PREFIX)) return // admin sessions not tracked in DB
 
     await this.deviceSessionsService.endSession(
       device.id,
@@ -75,13 +108,14 @@ export class DeviceUserAuthService {
       jobTitle: string | null
       photoUrl: string | null
       status: string
+      isDeviceAdmin: boolean
     }>
   > {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
 
-    const users = await this.deviceUsersService.findAllWithPinHash(device.tenantId)
-    return users.map((u) => ({
+    const operationalUsers = await this.deviceUsersService.findAllWithPinHash(device.tenantId)
+    const result = operationalUsers.map((u) => ({
       id: u.id,
       username: u.username,
       fullName: u.fullName,
@@ -91,6 +125,23 @@ export class DeviceUserAuthService {
       status: u.status,
       isDeviceAdmin: u.isDeviceAdmin,
     }))
+
+    // Include IT admin users from users table
+    const itUsers = await this.usersService.findAllWithDevicePinHash(device.tenantId)
+    for (const u of itUsers) {
+      result.push({
+        id: u.id,
+        username: u.deviceUsername!,
+        fullName: `${u.firstName} ${u.lastName}`,
+        pinHash: (u as any).devicePinHash,
+        jobTitle: null,
+        photoUrl: null,
+        status: 'ACTIVE',
+        isDeviceAdmin: true,
+      })
+    }
+
+    return result
   }
 
   async syncOfflineSessions(
@@ -113,6 +164,8 @@ export class DeviceUserAuthService {
   async validateSession(deviceToken: string, sessionId: string): Promise<{ valid: boolean }> {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
+
+    if (sessionId.startsWith(ADMIN_SESSION_PREFIX)) return { valid: true } // admin sessions always valid
 
     const session = await this.deviceSessionsService.findById(sessionId, device.id)
     if (!session || session.status !== DeviceSessionStatus.ACTIVE) {

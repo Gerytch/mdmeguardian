@@ -51,6 +51,7 @@ class DeviceLoginActivity : AppCompatActivity() {
         const val PREF_USER_ID = "device_user_id"
         const val PREF_USER_NAME = "device_user_name"
         const val PREF_SESSION_OFFLINE = "device_user_session_offline"
+        const val PREF_SESSION_TYPE = "device_user_session_type" // "operational" | "admin"
         const val EXTRA_REASON = "reason"
 
         @Volatile var isInForeground = false
@@ -74,8 +75,12 @@ class DeviceLoginActivity : AppCompatActivity() {
                 .remove(PREF_USER_ID)
                 .remove(PREF_USER_NAME)
                 .remove(PREF_SESSION_OFFLINE)
+                .remove(PREF_SESSION_TYPE)
                 .apply()
         }
+
+        fun isAdminSession(context: Context): Boolean =
+            SecurePreferences.getInstance(context).getString(PREF_SESSION_TYPE, "operational") == "admin"
     }
 
     private lateinit var dpm: DevicePolicyManager
@@ -173,12 +178,10 @@ class DeviceLoginActivity : AppCompatActivity() {
                             .putString(PREF_USER_ID, r.deviceUserId)
                             .putString(PREF_USER_NAME, r.fullName)
                             .putBoolean(PREF_SESSION_OFFLINE, false)
+                            .putString(PREF_SESSION_TYPE, r.sessionType)
                             .apply()
-                        Log.i(TAG, "Login online OK: ${r.fullName} session=${r.sessionId}")
-                        // Check if this is a device admin user (from cache)
-                        val cachedUser = OfflineSessionStore.getUserCache(this@DeviceLoginActivity)
-                            .firstOrNull { it.id == r.deviceUserId }
-                        if (cachedUser?.isDeviceAdmin == true) {
+                        Log.i(TAG, "Login online OK: ${r.fullName} session=${r.sessionId} type=${r.sessionType}")
+                        if (r.sessionType == "admin") {
                             applyAdminBypass()
                         }
                         startSessionMonitor()
@@ -201,13 +204,15 @@ class DeviceLoginActivity : AppCompatActivity() {
                                 startedAt = now,
                             )
                         )
+                        val sessionType = if (user.isDeviceAdmin) "admin" else "operational"
                         SecurePreferences.getInstance(this@DeviceLoginActivity).edit()
                             .putString(PREF_SESSION_ID, offlineId)
                             .putString(PREF_USER_ID, user.id)
                             .putString(PREF_USER_NAME, user.fullName)
                             .putBoolean(PREF_SESSION_OFFLINE, true)
+                            .putString(PREF_SESSION_TYPE, sessionType)
                             .apply()
-                        Log.i(TAG, "Login OFFLINE OK: ${user.fullName} offlineId=$offlineId")
+                        Log.i(TAG, "Login OFFLINE OK: ${user.fullName} offlineId=$offlineId type=$sessionType")
                         if (user.isDeviceAdmin) {
                             applyAdminBypass()
                         } else {

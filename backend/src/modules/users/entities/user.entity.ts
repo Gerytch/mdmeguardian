@@ -48,6 +48,15 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  canAccessDevices: boolean;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  deviceUsername: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  devicePinHash: string | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt: Date | null;
 

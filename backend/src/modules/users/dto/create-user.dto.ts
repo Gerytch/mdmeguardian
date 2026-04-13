@@ -1,9 +1,11 @@
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Length,
   MinLength,
   MaxLength,
 } from 'class-validator';
@@ -31,6 +33,20 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   @IsOptional()
   role?: UserRole;
+
+  @IsBoolean()
+  @IsOptional()
+  canAccessDevices?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  deviceUsername?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(4, 16)
+  devicePin?: string;
 }
 
 export class UpdateUserDto {
@@ -48,8 +64,23 @@ export class UpdateUserDto {
   @IsOptional()
   role?: UserRole;
 
+  @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  canAccessDevices?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  deviceUsername?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(4, 16)
+  devicePin?: string;
 }
 
 export class ChangePasswordDto {
