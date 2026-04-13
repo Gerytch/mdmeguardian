@@ -350,7 +350,7 @@ export default function DeviceDetailPage() {
     setRenaming(true)
     try {
       const updated = await devicesApi.update(tenantId, device.id, { name: renameValue.trim() })
-      setDevice(updated)
+      setDevice(updated.data)
       setShowRename(false)
       setMsg({ type: 'success', text: 'Nome atualizado — comando RENAME_DEVICE despachado ao dispositivo.' })
     } catch {
