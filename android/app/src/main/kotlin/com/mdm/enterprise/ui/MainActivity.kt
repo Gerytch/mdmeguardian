@@ -133,6 +133,9 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("is_enrolled", true)
             .apply()
 
+        // Mirror to device-protected storage for Direct Boot (before first unlock after reboot)
+        com.mdm.enterprise.utils.BootPrefs.save(this, token, deviceId, tenantId, serverUrl)
+
         // Reset API client so it rebuilds with the new server_url
         com.mdm.enterprise.api.MdmApiClient.reset()
 
@@ -222,6 +225,11 @@ class MainActivity : AppCompatActivity() {
                     .putString("server_url", serverUrl)
                     .putBoolean("is_enrolled", true)
                     .apply()
+
+                // Mirror to device-protected storage for Direct Boot (before first unlock after reboot)
+                com.mdm.enterprise.utils.BootPrefs.save(
+                    this@MainActivity, response.deviceToken, response.id, tenantId, serverUrl
+                )
 
                 MdmApiClient.reset()
 

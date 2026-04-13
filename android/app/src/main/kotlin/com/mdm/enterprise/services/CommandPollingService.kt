@@ -22,6 +22,7 @@ import com.mdm.enterprise.api.models.PolicyRules
 import com.mdm.enterprise.api.models.RequiredApp
 import com.mdm.enterprise.ui.AdminLockActivity
 import com.mdm.enterprise.ui.DeviceLoginActivity
+import com.mdm.enterprise.utils.BootPrefs
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import kotlinx.coroutines.*
@@ -197,9 +198,10 @@ class CommandPollingService : Service() {
         // Apply deferred kiosk if required apps finished installing since last poll
         policyService.applyPendingKioskIfReady()
 
-        val deviceToken = prefs.getStr("device_token") ?: return
-        val deviceId   = prefs.getStr("device_id")    ?: return
-        val tenantId   = prefs.getStr("tenant_id")    ?: return
+        // Fall back to device-protected BootPrefs before first unlock (Direct Boot)
+        val deviceToken = prefs.getStr("device_token") ?: BootPrefs.getDeviceToken(applicationContext) ?: return
+        val deviceId   = prefs.getStr("device_id")    ?: BootPrefs.getDeviceId(applicationContext)    ?: return
+        val tenantId   = prefs.getStr("tenant_id")    ?: BootPrefs.getTenantId(applicationContext)    ?: return
 
         val sessionId = prefs.getStr(com.mdm.enterprise.ui.DeviceLoginActivity.PREF_SESSION_ID)
         if (sessionId != null) {

@@ -92,10 +92,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Device Admin Receiver -->
+        <!-- Device Admin Receiver — directBootAware so it receives LOCKED_BOOT_COMPLETED
+             before the user unlocks the device for the first time after reboot. -->
         <receiver
             android:name=".admin.MdmDeviceAdminReceiver"
             android:exported="true"
+            android:directBootAware="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
@@ -105,6 +107,7 @@
                 <action android:name="android.app.action.ACTION_DEVICE_ADMIN_DISABLE_REQUESTED" />
                 <action android:name="android.app.action.ACTION_DEVICE_ADMIN_DISABLED" />
                 <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
@@ -148,6 +151,7 @@
         <service
             android:name=".services.CommandPollingService"
             android:exported="false"
+            android:directBootAware="true"
             android:foregroundServiceType="specialUse">
             <meta-data
                 android:name="android.app.foreground_service.special_use_case"

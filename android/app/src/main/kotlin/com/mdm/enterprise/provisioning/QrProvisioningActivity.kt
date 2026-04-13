@@ -20,6 +20,7 @@ import com.mdm.enterprise.api.models.EnrollDeviceRequest
 import com.mdm.enterprise.api.models.QrEnrollmentData
 import com.mdm.enterprise.services.CommandPollingWorker
 import com.mdm.enterprise.services.LocationTrackingWorker
+import com.mdm.enterprise.utils.BootPrefs
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import kotlinx.coroutines.launch
@@ -146,6 +147,16 @@ class QrProvisioningActivity : AppCompatActivity() {
                 .putString("jwt_token", response.deviceToken)
                 .putBoolean("is_enrolled", true)
                 .apply()
+
+            // Mirror credentials to device-protected storage so the service can
+            // start on LOCKED_BOOT_COMPLETED (before user unlocks after reboot).
+            BootPrefs.save(
+                context     = this,
+                deviceToken = response.deviceToken,
+                deviceId    = response.id,
+                tenantId    = data.tenantId,
+                serverUrl   = "${serverUrl}/api/v1",
+            )
 
             CommandPollingWorker.schedule(this)
             LocationTrackingWorker.schedule(this)

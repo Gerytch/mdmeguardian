@@ -3,6 +3,7 @@ package com.mdm.enterprise.api
 import android.content.Context
 import com.mdm.enterprise.BuildConfig
 import com.mdm.enterprise.api.models.*
+import com.mdm.enterprise.utils.BootPrefs
 import com.mdm.enterprise.utils.SecurePreferences
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -163,7 +164,10 @@ object MdmApiClient {
             }
             .build()
 
-        val baseUrl = prefs.getString("server_url", BuildConfig.API_BASE_URL)!!
+        // Fall back to BootPrefs (device-protected storage) before first unlock (Direct Boot)
+        val baseUrl = (prefs.getString("server_url", null)
+            ?: BootPrefs.getServerUrl(context)
+            ?: BuildConfig.API_BASE_URL)
             .trimEnd('/') + "/"
 
         return Retrofit.Builder()

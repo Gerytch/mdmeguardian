@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.mdm.enterprise.services.CommandPollingService
 import com.mdm.enterprise.ui.AdminLockActivity
+import com.mdm.enterprise.utils.BootPrefs
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.putBool
 
@@ -23,13 +24,25 @@ class MdmDeviceAdminReceiver : DeviceAdminReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.i(TAG, "Boot completed — restoring MDM services")
-            val prefs = SecurePreferences.getInstance(context)
-            val isEnrolled = prefs.getString("device_token", null) != null
-            if (isEnrolled) {
-                CommandPollingService.start(context)
-                AdminLockActivity.restoreIfNeeded(context)
+        when (intent.action) {
+            // Fires before first unlock — use device-protected BootPrefs (credential storage
+            // not yet available). Starts polling so commands arrive as soon as the device boots,
+            // even if the user never touches the screen.
+            Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
+                Log.i(TAG, "Locked boot completed — starting MDM services from BootPrefs")
+                if (BootPrefs.isEnrolled(context)) {
+                    CommandPollingService.start(context)
+                }
+            }
+            // Fires after first unlock — credential storage is available; restore full state.
+            Intent.ACTION_BOOT_COMPLETED -> {
+                Log.i(TAG, "Boot completed — restoring MDM services")
+                val prefs = SecurePreferences.getInstance(context)
+                val isEnrolled = prefs.getString("device_token", null) != null
+                if (isEnrolled) {
+                    CommandPollingService.start(context)
+                    AdminLockActivity.restoreIfNeeded(context)
+                }
             }
         }
     }
