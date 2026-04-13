@@ -297,6 +297,18 @@ class CommandPollingService : Service() {
                     "WIPE"   -> policyService.wipeDevice()
                     "REBOOT" -> policyService.reboot()
 
+                    "RENAME_DEVICE" -> {
+                        val name = command.payload["name"] as? String
+                        if (!name.isNullOrBlank()) {
+                            android.provider.Settings.Global.putString(
+                                applicationContext.contentResolver,
+                                android.provider.Settings.Global.DEVICE_NAME,
+                                name,
+                            )
+                            Log.i(TAG, "RENAME_DEVICE: device name set to \"$name\"")
+                        }
+                    }
+
                     "ADMIN_LOCK" -> {
                         // Admin lock must wake the screen to show the lock activity
                         val screenWl = pm.newWakeLock(

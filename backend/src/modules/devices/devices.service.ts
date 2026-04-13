@@ -83,6 +83,7 @@ export class DevicesService {
   async update(tenantId: string, id: string, dto: UpdateDeviceDto): Promise<Device> {
     const device = await this.findOne(tenantId, id);
     const oldPolicyId = device.policyId;
+    const nameChanged = dto.name !== undefined && dto.name !== device.name;
 
     if (dto.name !== undefined) device.name = dto.name;
     if (dto.status !== undefined) device.status = dto.status;
@@ -96,6 +97,19 @@ export class DevicesService {
     // Sync admin lock state when device is moved to a different policy
     if (dto.policyId !== undefined && dto.policyId !== oldPolicyId) {
       await this.syncAdminLockOnPolicyChange(tenantId, id, dto.policyId ?? null);
+    }
+
+    // Auto-dispatch RENAME_DEVICE when name changes
+    if (nameChanged) {
+      await this.commandRepository.save(
+        this.commandRepository.create({
+          tenantId,
+          deviceId: id,
+          type: CommandType.RENAME_DEVICE,
+          payload: { name: dto.name },
+          createdBy: 'system',
+        }),
+      );
     }
 
     return saved;

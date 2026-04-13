@@ -29,6 +29,7 @@ export enum CommandType {
   NETWORK_TEST = 'NETWORK_TEST',
   UPDATE_AGENT = 'UPDATE_AGENT',
   UNINSTALL_AGENT = 'UNINSTALL_AGENT',
+  RENAME_DEVICE = 'RENAME_DEVICE',
 }
 
 export enum CommandStatus {
