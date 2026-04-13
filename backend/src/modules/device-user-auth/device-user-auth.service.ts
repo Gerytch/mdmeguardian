@@ -5,6 +5,7 @@ import { DeviceSessionsService } from '../device-sessions/device-sessions.servic
 import { DevicesService } from '../devices/devices.service'
 import { UsersService } from '../users/users.service'
 import { DeviceSessionStatus } from '../device-sessions/entities/device-session.entity'
+import { DeviceUserStatus } from '../device-users/entities/device-user.entity'
 
 const ADMIN_SESSION_PREFIX = 'adm_'
 
@@ -136,7 +137,7 @@ export class DeviceUserAuthService {
         pinHash: (u as any).devicePinHash,
         jobTitle: null,
         photoUrl: null,
-        status: 'ACTIVE',
+        status: DeviceUserStatus.ACTIVE,
         isDeviceAdmin: true,
       })
     }
