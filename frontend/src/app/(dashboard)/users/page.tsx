@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { getTenantId } from '@/lib/auth'
 
 interface ItUser {
   id: string
@@ -39,7 +40,7 @@ function getRoleBadge(role: string) {
 export default function UsersPage() {
   const [users, setUsers] = useState<ItUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [tenantId, setTenantId] = useState<string | null>(null)
+  const tenantId = getTenantId()
 
   const [showModal, setShowModal] = useState(false)
   const [editUser, setEditUser] = useState<ItUser | null>(null)
@@ -60,12 +61,7 @@ export default function UsersPage() {
   })
 
   useEffect(() => {
-    const profile = JSON.parse(localStorage.getItem('userProfile') || '{}')
-    const tid = profile?.tenantId
-    if (tid) {
-      setTenantId(tid)
-      fetchUsers(tid)
-    }
+    if (tenantId) fetchUsers(tenantId)
   }, [])
 
   async function fetchUsers(tid: string) {
