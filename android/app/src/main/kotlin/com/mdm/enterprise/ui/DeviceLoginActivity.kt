@@ -21,21 +21,34 @@ import androidx.lifecycle.lifecycleScope
 import com.mdm.enterprise.R
 import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.MdmApiClient
+import com.mdm.enterprise.api.models.DeviceUserCacheEntry
 import com.mdm.enterprise.api.models.DeviceUserLoginRequest
+import com.mdm.enterprise.api.models.DeviceUserLoginResponse
 import com.mdm.enterprise.services.UserActivityMonitorService
+import com.mdm.enterprise.utils.OfflineSessionStore
+import com.mdm.enterprise.utils.PendingOfflineSession
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class DeviceLoginActivity : AppCompatActivity() {
 
+    private sealed class LoginResult {
+        data class Online(val response: DeviceUserLoginResponse) : LoginResult()
+        data class Offline(val user: DeviceUserCacheEntry) : LoginResult()
+        object InvalidCredentials : LoginResult()
+        object NoOfflineCache : LoginResult()
+    }
+
     companion object {
         private const val TAG = "DeviceLoginActivity"
         const val PREF_SESSION_ID = "device_user_session_id"
         const val PREF_USER_ID = "device_user_id"
         const val PREF_USER_NAME = "device_user_name"
+        const val PREF_SESSION_OFFLINE = "device_user_session_offline"
         const val EXTRA_REASON = "reason"
 
         @Volatile var isInForeground = false
@@ -58,6 +71,7 @@ class DeviceLoginActivity : AppCompatActivity() {
                 .remove(PREF_SESSION_ID)
                 .remove(PREF_USER_ID)
                 .remove(PREF_USER_NAME)
+                .remove(PREF_SESSION_OFFLINE)
                 .apply()
         }
     }
@@ -122,42 +136,88 @@ class DeviceLoginActivity : AppCompatActivity() {
             tvError.visibility = View.INVISIBLE
 
             lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) {
+                val loginResult = withContext(Dispatchers.IO) {
+                    val prefs = SecurePreferences.getInstance(this@DeviceLoginActivity)
+                    val token = prefs.getStr("device_token")
+                    if (token == null) return@withContext LoginResult.NoOfflineCache
+
                     try {
-                        val prefs = SecurePreferences.getInstance(this@DeviceLoginActivity)
-                        val token = prefs.getStr("device_token") ?: return@withContext null
                         val api = MdmApiClient.getInstance(this@DeviceLoginActivity)
-                        api.loginDeviceUser(token, DeviceUserLoginRequest(username, pin))
+                        LoginResult.Online(api.loginDeviceUser(token, DeviceUserLoginRequest(username, pin)))
+                    } catch (e: retrofit2.HttpException) {
+                        // 4xx = credenciais inválidas — não tentar offline
+                        if (e.code() in 400..499) {
+                            Log.w(TAG, "Login rejected by server (${e.code()}) — not trying offline")
+                            LoginResult.InvalidCredentials
+                        } else {
+                            Log.w(TAG, "Server error ${e.code()}, trying offline")
+                            tryOfflineLogin(username, pin)
+                        }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Login failed: ${e.message}")
-                        null
+                        // Erro de rede → tenta offline
+                        Log.w(TAG, "Network error, trying offline: ${e.message}")
+                        tryOfflineLogin(username, pin)
                     }
                 }
 
                 progress.visibility = View.GONE
                 btnLogin.isEnabled = true
 
-                if (result != null) {
-                    // Persist session
-                    SecurePreferences.getInstance(this@DeviceLoginActivity).edit()
-                        .putString(PREF_SESSION_ID, result.sessionId)
-                        .putString(PREF_USER_ID, result.deviceUserId)
-                        .putString(PREF_USER_NAME, result.fullName)
-                        .apply()
-
-                    Log.i(TAG, "Login OK: ${result.fullName} session=${result.sessionId}")
-
-                    // Start inactivity monitor
-                    val prefs = SecurePreferences.getInstance(this@DeviceLoginActivity)
-                    val timeoutMin = prefs.getString("inactivity_timeout_minutes", "5")?.toIntOrNull() ?: 5
-                    UserActivityMonitorService.start(this@DeviceLoginActivity, timeoutMin)
-
-                    stopLockTask()
-                    finish()
-                } else {
-                    tvError.text = "Credenciais inválidas"
-                    tvError.visibility = View.VISIBLE
-                    etPin.setText("")
+                when (loginResult) {
+                    is LoginResult.Online -> {
+                        val r = loginResult.response
+                        SecurePreferences.getInstance(this@DeviceLoginActivity).edit()
+                            .putString(PREF_SESSION_ID, r.sessionId)
+                            .putString(PREF_USER_ID, r.deviceUserId)
+                            .putString(PREF_USER_NAME, r.fullName)
+                            .putBoolean(PREF_SESSION_OFFLINE, false)
+                            .apply()
+                        Log.i(TAG, "Login online OK: ${r.fullName} session=${r.sessionId}")
+                        startSessionMonitor()
+                        stopLockTask()
+                        finish()
+                    }
+                    is LoginResult.Offline -> {
+                        val user = loginResult.user
+                        val offlineId = UUID.randomUUID().toString()
+                        val now = OfflineSessionStore.nowIso()
+                        OfflineSessionStore.addPendingSession(
+                            this@DeviceLoginActivity,
+                            PendingOfflineSession(
+                                offlineSessionId = offlineId,
+                                deviceUserId = user.id,
+                                username = user.username,
+                                fullName = user.fullName,
+                                jobTitle = user.jobTitle,
+                                photoUrl = user.photoUrl,
+                                startedAt = now,
+                            )
+                        )
+                        SecurePreferences.getInstance(this@DeviceLoginActivity).edit()
+                            .putString(PREF_SESSION_ID, offlineId)
+                            .putString(PREF_USER_ID, user.id)
+                            .putString(PREF_USER_NAME, user.fullName)
+                            .putBoolean(PREF_SESSION_OFFLINE, true)
+                            .apply()
+                        Log.i(TAG, "Login OFFLINE OK: ${user.fullName} offlineId=$offlineId")
+                        android.widget.Toast.makeText(
+                            this@DeviceLoginActivity,
+                            "Modo offline — sessão será sincronizada quando houver rede",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                        startSessionMonitor()
+                        stopLockTask()
+                        finish()
+                    }
+                    is LoginResult.InvalidCredentials, LoginResult.NoOfflineCache -> {
+                        val msg = if (loginResult is LoginResult.NoOfflineCache)
+                            "Sem rede e sem cache offline disponível"
+                        else
+                            "Credenciais inválidas"
+                        tvError.text = msg
+                        tvError.visibility = View.VISIBLE
+                        etPin.setText("")
+                    }
                 }
             }
         }
@@ -169,6 +229,17 @@ class DeviceLoginActivity : AppCompatActivity() {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(dismissReceiver, filter)
         }
+    }
+
+    private fun tryOfflineLogin(username: String, pin: String): LoginResult {
+        val cached = OfflineSessionStore.validatePin(this, username, pin)
+        return if (cached != null) LoginResult.Offline(cached) else LoginResult.NoOfflineCache
+    }
+
+    private fun startSessionMonitor() {
+        val prefs = SecurePreferences.getInstance(this)
+        val timeoutMin = prefs.getString("inactivity_timeout_minutes", "5")?.toIntOrNull() ?: 5
+        UserActivityMonitorService.start(this, timeoutMin)
     }
 
     private fun enterLockTask() {

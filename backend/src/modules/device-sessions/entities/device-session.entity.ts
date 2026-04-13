@@ -18,6 +18,8 @@ export class DeviceSession {
   @Column({ type: 'timestamptz', nullable: true }) endedAt: Date | null
   @Column({ type: 'enum', enum: DeviceSessionStatus, default: DeviceSessionStatus.ACTIVE }) status: DeviceSessionStatus
   @Column({ type: 'varchar', length: 50, nullable: true }) endedReason: string | null
+  @Column({ type: 'boolean', default: false }) isOffline: boolean
+  @Column({ type: 'varchar', length: 36, nullable: true, unique: true }) offlineSessionId: string | null
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date
 }

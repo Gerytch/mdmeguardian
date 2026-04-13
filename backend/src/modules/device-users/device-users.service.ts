@@ -87,6 +87,15 @@ export class DeviceUsersService {
     await this.deviceUserRepository.remove(deviceUser)
   }
 
+  async findAllWithPinHash(tenantId: string): Promise<DeviceUser[]> {
+    return this.deviceUserRepository
+      .createQueryBuilder('deviceUser')
+      .addSelect('deviceUser.pinHash')
+      .where('deviceUser.tenantId = :tenantId', { tenantId })
+      .andWhere('deviceUser.status = :status', { status: DeviceUserStatus.ACTIVE })
+      .getMany()
+  }
+
   async validateCredentials(tenantId: string, username: string, pin: string): Promise<DeviceUser> {
     const deviceUser = await this.deviceUserRepository
       .createQueryBuilder('deviceUser')

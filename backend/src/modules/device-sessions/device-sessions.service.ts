@@ -117,6 +117,46 @@ export class DeviceSessionsService {
     return { data, total, page, limit }
   }
 
+  async syncOffline(
+    tenantId: string,
+    deviceId: string,
+    sessions: Array<{
+      offlineSessionId: string
+      deviceUserId: string
+      startedAt: string
+      endedAt?: string | null
+      endedReason?: string | null
+      status?: string
+    }>,
+  ): Promise<{ synced: number }> {
+    let synced = 0
+    for (const s of sessions) {
+      const existing = await this.sessionRepository.findOne({
+        where: { offlineSessionId: s.offlineSessionId },
+      })
+      if (existing) continue
+
+      const status = s.endedAt
+        ? ((s.status as DeviceSessionStatus) ?? DeviceSessionStatus.CLOSED)
+        : DeviceSessionStatus.CLOSED
+
+      const session = this.sessionRepository.create({
+        tenantId,
+        deviceId,
+        deviceUserId: s.deviceUserId,
+        isOffline: true,
+        offlineSessionId: s.offlineSessionId,
+        startedAt: new Date(s.startedAt),
+        endedAt: s.endedAt ? new Date(s.endedAt) : null,
+        endedReason: s.endedReason ?? null,
+        status,
+      })
+      await this.sessionRepository.save(session)
+      synced++
+    }
+    return { synced }
+  }
+
   async exportCsv(
     tenantId: string,
     filters?: {

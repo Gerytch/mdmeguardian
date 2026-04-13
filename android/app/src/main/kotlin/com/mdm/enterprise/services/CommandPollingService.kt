@@ -25,6 +25,13 @@ import com.mdm.enterprise.ui.DeviceLoginActivity
 import com.mdm.enterprise.utils.BootPrefs
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import com.mdm.enterprise.api.models.OfflineSessionPayload
+import com.mdm.enterprise.api.models.SyncOfflineRequest
+import com.mdm.enterprise.utils.OfflineSessionStore
 import kotlinx.coroutines.*
 
 class CommandPollingService : Service() {
@@ -57,6 +64,13 @@ class CommandPollingService : Service() {
     private lateinit var apkInstaller: ApkInstaller
     private lateinit var networkTestExecutor: NetworkTestExecutor
 
+    private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            Log.i(TAG, "Network available — syncing offline sessions and refreshing user cache")
+            scope.launch { syncAndRefresh() }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         api = MdmApiClient.getInstance(applicationContext)
@@ -65,6 +79,16 @@ class CommandPollingService : Service() {
         apkInstaller = ApkInstaller(applicationContext)
         networkTestExecutor = NetworkTestExecutor(applicationContext)
         createNotificationChannel()
+
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            cm.registerDefaultNetworkCallback(connectivityCallback)
+        } else {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(request, connectivityCallback)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -90,6 +114,10 @@ class CommandPollingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.unregisterNetworkCallback(connectivityCallback)
+        } catch (_: Exception) {}
         scope.cancel()
         super.onDestroy()
     }
@@ -204,7 +232,8 @@ class CommandPollingService : Service() {
         val tenantId   = prefs.getStr("tenant_id")    ?: BootPrefs.getTenantId(applicationContext)    ?: return
 
         val sessionId = prefs.getStr(com.mdm.enterprise.ui.DeviceLoginActivity.PREF_SESSION_ID)
-        if (sessionId != null) {
+        val isOfflineSession = prefs.getBoolean(com.mdm.enterprise.ui.DeviceLoginActivity.PREF_SESSION_OFFLINE, false)
+        if (sessionId != null && !isOfflineSession) {
             val resp = try { api.validateSession(deviceToken, sessionId) } catch (e: Exception) { null }
             if (resp != null && resp.code() == 410) {
                 Log.i(TAG, "Session $sessionId invalidated remotely — forcing re-login")
@@ -215,6 +244,11 @@ class CommandPollingService : Service() {
                 )
                 return
             }
+        }
+
+        // Sync offline sessions pendentes sempre que o poll conectar com sucesso
+        if (OfflineSessionStore.getPendingSessions(applicationContext).isNotEmpty()) {
+            syncPendingOfflineSessions(deviceToken)
         }
 
         val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME)
@@ -601,6 +635,43 @@ class CommandPollingService : Service() {
             .setAutoCancel(false)
             .build()
         nm.notify(AdminLockActivity.ALERT_NOTIF_ID, notification)
+    }
+
+    private suspend fun syncAndRefresh() {
+        val token = prefs.getStr("device_token") ?: return
+        // Atualiza cache de usuários para login offline
+        try {
+            val users = api.getDeviceUsers(token)
+            OfflineSessionStore.saveUserCache(applicationContext, users)
+            Log.i(TAG, "User cache refreshed: ${users.size} users")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to refresh user cache: ${e.message}")
+        }
+        // Sincroniza sessões offline pendentes
+        syncPendingOfflineSessions(token)
+    }
+
+    private suspend fun syncPendingOfflineSessions(token: String) {
+        val pending = OfflineSessionStore.getPendingSessions(applicationContext)
+        if (pending.isEmpty()) return
+        try {
+            val payloads = pending.map { s ->
+                OfflineSessionPayload(
+                    offlineSessionId = s.offlineSessionId,
+                    deviceUserId = s.deviceUserId,
+                    startedAt = s.startedAt,
+                    endedAt = s.endedAt,
+                    endedReason = s.endedReason,
+                    status = s.status,
+                )
+            }
+            val result = api.syncOfflineSessions(token, SyncOfflineRequest(payloads))
+            val syncedIds = pending.map { it.offlineSessionId }.toSet()
+            OfflineSessionStore.removeSyncedSessions(applicationContext, syncedIds)
+            Log.i(TAG, "Offline sessions synced: ${result.synced}/${pending.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to sync offline sessions: ${e.message}")
+        }
     }
 
     private fun buildNotification() =

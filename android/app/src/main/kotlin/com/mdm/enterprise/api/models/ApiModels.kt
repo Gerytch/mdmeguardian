@@ -174,6 +174,35 @@ data class InstallResultRequest(
     val errorMessage: String? = null,
 )
 
+// ─── Offline Login ────────────────────────────────────────────────────────────
+
+data class DeviceUserCacheEntry(
+    val id: String,
+    val username: String,
+    val fullName: String,
+    val pinHash: String,
+    val jobTitle: String?,
+    val photoUrl: String?,
+    val status: String,
+)
+
+data class OfflineSessionPayload(
+    val offlineSessionId: String,
+    val deviceUserId: String,
+    val startedAt: String,
+    val endedAt: String? = null,
+    val endedReason: String? = null,
+    val status: String = "CLOSED",
+)
+
+data class SyncOfflineRequest(
+    val sessions: List<OfflineSessionPayload>,
+)
+
+data class SyncOfflineResponse(
+    val synced: Int,
+)
+
 // ─── Enrollment ───────────────────────────────────────────────────────────────
 
 data class QrEnrollmentData(

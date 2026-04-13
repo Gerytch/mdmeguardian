@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.mdm.enterprise.api.MdmApiClient
 import com.mdm.enterprise.ui.DeviceLoginActivity
+import com.mdm.enterprise.utils.OfflineSessionStore
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import kotlinx.coroutines.*
@@ -79,17 +80,31 @@ class UserActivityMonitorService : Service() {
     }
 
     private suspend fun handleTimeout() {
-        // Report timeout to backend
-        try {
-            val prefs = SecurePreferences.getInstance(this)
-            val token = prefs.getStr("device_token")
-            val sessionId = prefs.getStr(DeviceLoginActivity.PREF_SESSION_ID)
-            if (token != null && sessionId != null) {
-                val api = MdmApiClient.getInstance(this)
-                api.reportSessionTimeout(token, sessionId)
+        val prefs = SecurePreferences.getInstance(this)
+        val token = prefs.getStr("device_token")
+        val sessionId = prefs.getStr(DeviceLoginActivity.PREF_SESSION_ID)
+        val isOffline = prefs.getBoolean(DeviceLoginActivity.PREF_SESSION_OFFLINE, false)
+
+        if (isOffline && sessionId != null) {
+            // Sessão offline — registra o encerramento localmente para sync posterior
+            OfflineSessionStore.updatePendingSession(
+                this,
+                offlineSessionId = sessionId,
+                endedAt = OfflineSessionStore.nowIso(),
+                endedReason = "INACTIVITY_TIMEOUT",
+                status = "TIMEOUT",
+            )
+            Log.i(TAG, "Offline session $sessionId marked as TIMEOUT")
+        } else {
+            // Report timeout to backend
+            try {
+                if (token != null && sessionId != null) {
+                    val api = MdmApiClient.getInstance(this)
+                    api.reportSessionTimeout(token, sessionId)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report timeout: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to report timeout: ${e.message}")
         }
 
         // Clear session — CommandPollingService watchdog will detect the missing session

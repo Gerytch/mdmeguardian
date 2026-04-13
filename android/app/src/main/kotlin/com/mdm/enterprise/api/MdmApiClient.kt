@@ -123,6 +123,17 @@ interface MdmApi {
         @Header("X-Device-Token") token: String,
         @Path("sessionId") sessionId: String,
     ): retrofit2.Response<Unit>
+
+    @GET("device/user-auth/users")
+    suspend fun getDeviceUsers(
+        @Header("X-Device-Token") token: String,
+    ): List<DeviceUserCacheEntry>
+
+    @POST("device/user-auth/sync-offline")
+    suspend fun syncOfflineSessions(
+        @Header("X-Device-Token") token: String,
+        @Body body: SyncOfflineRequest,
+    ): SyncOfflineResponse
 }
 
 // ─── Client Factory ───────────────────────────────────────────────────────────

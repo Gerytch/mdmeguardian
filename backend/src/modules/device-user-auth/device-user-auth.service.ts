@@ -66,6 +66,49 @@ export class DeviceUserAuthService {
     )
   }
 
+  async getDeviceUsers(deviceToken: string): Promise<
+    Array<{
+      id: string
+      username: string
+      fullName: string
+      pinHash: string
+      jobTitle: string | null
+      photoUrl: string | null
+      status: string
+    }>
+  > {
+    const device = await this.devicesService.findByToken(deviceToken)
+    if (!device) throw new UnauthorizedException('Invalid device token')
+
+    const users = await this.deviceUsersService.findAllWithPinHash(device.tenantId)
+    return users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      fullName: u.fullName,
+      pinHash: (u as any).pinHash,
+      jobTitle: u.jobTitle,
+      photoUrl: u.photoUrl,
+      status: u.status,
+    }))
+  }
+
+  async syncOfflineSessions(
+    deviceToken: string,
+    sessions: Array<{
+      offlineSessionId: string
+      deviceUserId: string
+      startedAt: string
+      endedAt?: string | null
+      endedReason?: string | null
+      status?: string
+    }>,
+  ): Promise<{ synced: number }> {
+    const device = await this.devicesService.findByToken(deviceToken)
+    if (!device) throw new UnauthorizedException('Invalid device token')
+
+    return this.deviceSessionsService.syncOffline(device.tenantId, device.id, sessions)
+  }
+
   async validateSession(deviceToken: string, sessionId: string): Promise<{ valid: boolean }> {
     const device = await this.devicesService.findByToken(deviceToken)
     if (!device) throw new UnauthorizedException('Invalid device token')
