@@ -209,6 +209,25 @@ class CommandPollingService : Service() {
                 delay(2_000L)
                 val authRequired = prefs.getString("device_user_auth_required", "false") == "true"
                 val hasSession = com.mdm.enterprise.ui.DeviceLoginActivity.hasActiveSession(applicationContext)
+                if (!hasSession) {
+                    // Restore pre-admin state if an admin user just logged out / timed out
+                    val preAdminState = OfflineSessionStore.getPreAdminState(applicationContext)
+                    if (preAdminState != null) {
+                        Log.i(TAG, "Session watchdog: restoring pre-admin state (locked=${preAdminState.wasAdminLocked} kiosk=${preAdminState.wasKioskActive})")
+                        if (preAdminState.wasAdminLocked) {
+                            policyService.adminLock(
+                                preAdminState.adminLockMessage,
+                                preAdminState.adminLockContact.takeIf { it.isNotBlank() },
+                                preAdminState.adminLockSeverity,
+                            )
+                        }
+                        if (preAdminState.wasKioskActive) {
+                            policyService.enableKioskMode(preAdminState.kioskHiddenApps, preAdminState.kioskMode)
+                            prefs.edit().putString("current_kiosk_mode", preAdminState.kioskMode).apply()
+                        }
+                        OfflineSessionStore.clearPreAdminState(applicationContext)
+                    }
+                }
                 if (authRequired && !hasSession && !com.mdm.enterprise.ui.DeviceLoginActivity.isInForeground) {
                     Log.i(TAG, "Session watchdog: no active session, triggering login (lockFired=$lockFired)")
                     postLoginRequiredAlert(applicationContext, lockNow = !lockFired)
@@ -308,6 +327,7 @@ class CommandPollingService : Service() {
                         val mode = (command.payload["mode"] as? String)
                             ?.takeIf { it in listOf("whitelist", "blacklist") } ?: "whitelist"
                         policyService.enableKioskMode(apps, mode)
+                        prefs.edit().putString("current_kiosk_mode", mode).apply()
                         result["mode"] = mode
                         result["appCount"] = apps.size
                     }

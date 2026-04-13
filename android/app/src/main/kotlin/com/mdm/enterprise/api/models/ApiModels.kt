@@ -184,6 +184,7 @@ data class DeviceUserCacheEntry(
     val jobTitle: String?,
     val photoUrl: String?,
     val status: String,
+    val isDeviceAdmin: Boolean = false,
 )
 
 data class OfflineSessionPayload(

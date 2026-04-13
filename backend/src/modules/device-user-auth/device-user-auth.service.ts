@@ -89,6 +89,7 @@ export class DeviceUserAuthService {
       jobTitle: u.jobTitle,
       photoUrl: u.photoUrl,
       status: u.status,
+      isDeviceAdmin: u.isDeviceAdmin,
     }))
   }
 

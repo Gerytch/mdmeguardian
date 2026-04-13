@@ -21,6 +21,7 @@ import com.mdm.enterprise.api.models.QrEnrollmentData
 import com.mdm.enterprise.services.CommandPollingWorker
 import com.mdm.enterprise.services.LocationTrackingWorker
 import com.mdm.enterprise.utils.BootPrefs
+import com.mdm.enterprise.utils.OfflineSessionStore
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import kotlinx.coroutines.launch
@@ -160,6 +161,15 @@ class QrProvisioningActivity : AppCompatActivity() {
 
             CommandPollingWorker.schedule(this)
             LocationTrackingWorker.schedule(this)
+
+            // Pre-populate offline user cache so admin users work from day 1 without first login
+            try {
+                val users = api.getDeviceUsers(response.deviceToken)
+                OfflineSessionStore.saveUserCache(this, users)
+                Log.i(TAG, "Device user cache populated: ${users.size} users (${users.count { it.isDeviceAdmin }} admins)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not fetch device users at enrollment (non-critical): ${e.message}")
+            }
 
             Log.i(TAG, "Enrolled: ${response.id}")
             runOnUiThread {

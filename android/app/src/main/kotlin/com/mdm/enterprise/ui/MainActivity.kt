@@ -30,6 +30,7 @@ import com.mdm.enterprise.services.LocationTrackingWorker
 import com.mdm.enterprise.services.UserActivityMonitorService
 import com.mdm.enterprise.services.InstallProgressTracker
 import com.mdm.enterprise.services.PackageInstalledReceiver
+import com.mdm.enterprise.utils.OfflineSessionStore
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +170,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.w(TAG, "App catalog sync failed (non-critical): ${e.message}")
             }
+            fetchAndCacheDeviceUsers(token)
         }
 
         Toast.makeText(this, "✓ Cadastro dev concluído!", Toast.LENGTH_LONG).show()
@@ -259,6 +261,8 @@ class MainActivity : AppCompatActivity() {
                     Log.w(TAG, "App catalog sync failed (non-critical): ${e.message}")
                 }
 
+                fetchAndCacheDeviceUsers(response.deviceToken)
+
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "✓ Dispositivo cadastrado com sucesso!", Toast.LENGTH_LONG).show()
                     updateUI()
@@ -270,6 +274,18 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Erro no cadastro: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    /** Fetches all device-users (with pinHash) from the server and caches locally for offline login. */
+    private suspend fun fetchAndCacheDeviceUsers(deviceToken: String) {
+        try {
+            val api = MdmApiClient.getInstance(this@MainActivity)
+            val users = api.getDeviceUsers(deviceToken)
+            OfflineSessionStore.saveUserCache(this@MainActivity, users)
+            Log.i(TAG, "Device user cache populated: ${users.size} users (${users.count { it.isDeviceAdmin }} admins)")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not fetch device users at enrollment (non-critical): ${e.message}")
         }
     }
 

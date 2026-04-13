@@ -70,7 +70,19 @@
         android:textColor="#55FFFFFF"
         android:textSize="12sp"
         android:gravity="center"
-        android:layout_marginBottom="64dp" />
+        android:layout_marginBottom="32dp" />
 
+    <!-- Admin login access for IT technicians -->
+    <TextView
+        android:id="@+id/tvAdminAccess"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⚙ Acesso T.I."
+        android:textColor="#44FFFFFF"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:padding="12dp"
+        android:clickable="true"
+        android:focusable="true" />
 
 </LinearLayout>

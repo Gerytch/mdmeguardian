@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, UnauthorizedException } from '@nestjs/common'
+import { Injectable, NotFoundException, ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import * as bcrypt from 'bcryptjs'
@@ -16,12 +16,17 @@ export class DeviceUsersService {
     const existing = await this.deviceUserRepository.findOne({ where: { tenantId, username: dto.username } })
     if (existing) throw new ConflictException(`Username "${dto.username}" already exists in this tenant`)
 
+    if (dto.isDeviceAdmin && dto.pin.length < 6) {
+      throw new BadRequestException('Admin PIN must be at least 6 digits')
+    }
+
     const pinHash = await bcrypt.hash(dto.pin, 10)
     const deviceUser = this.deviceUserRepository.create({
       tenantId,
       username: dto.username,
       fullName: dto.fullName,
       pinHash,
+      isDeviceAdmin: dto.isDeviceAdmin ?? false,
       department: dto.department ?? null,
       jobTitle: dto.jobTitle ?? null,
       photoUrl: dto.photoUrl ?? null,
@@ -64,6 +69,7 @@ export class DeviceUsersService {
     const deviceUser = await this.findOne(tenantId, id)
     if (dto.username !== undefined) deviceUser.username = dto.username
     if (dto.fullName !== undefined) deviceUser.fullName = dto.fullName
+    if (dto.isDeviceAdmin !== undefined) deviceUser.isDeviceAdmin = dto.isDeviceAdmin
     if (dto.department !== undefined) deviceUser.department = dto.department ?? null
     if (dto.jobTitle !== undefined) deviceUser.jobTitle = dto.jobTitle ?? null
     if (dto.photoUrl !== undefined) deviceUser.photoUrl = dto.photoUrl ?? null
@@ -71,7 +77,10 @@ export class DeviceUsersService {
   }
 
   async updatePin(tenantId: string, id: string, pin: string): Promise<void> {
-    await this.findOne(tenantId, id)
+    const user = await this.findOne(tenantId, id)
+    if (user.isDeviceAdmin && pin.length < 6) {
+      throw new BadRequestException('Admin PIN must be at least 6 digits')
+    }
     const pinHash = await bcrypt.hash(pin, 10)
     await this.deviceUserRepository.update({ id, tenantId }, { pinHash })
   }

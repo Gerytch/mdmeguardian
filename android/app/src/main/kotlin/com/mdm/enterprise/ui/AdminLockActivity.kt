@@ -141,6 +141,11 @@ class AdminLockActivity : AppCompatActivity() {
         enterLockTask()
         alertUser()
 
+        // "Acesso T.I." — starts DeviceLoginActivity for admin users within lock task
+        findViewById<TextView>(R.id.tvAdminAccess).setOnClickListener {
+            DeviceLoginActivity.start(this)
+        }
+
         // Register receiver to listen for remote ADMIN_UNLOCK
         val filter = IntentFilter("com.mdm.enterprise.ADMIN_UNLOCK")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

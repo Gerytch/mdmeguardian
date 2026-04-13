@@ -24,11 +24,22 @@ data class PendingOfflineSession(
     val status: String = "CLOSED",
 )
 
+data class PreAdminState(
+    val wasAdminLocked: Boolean = false,
+    val adminLockMessage: String = "",
+    val adminLockContact: String = "",
+    val adminLockSeverity: String = "warning",
+    val wasKioskActive: Boolean = false,
+    val kioskHiddenApps: List<String> = emptyList(),
+    val kioskMode: String = "whitelist",
+)
+
 object OfflineSessionStore {
 
     private const val TAG = "OfflineSessionStore"
     private const val KEY_USER_CACHE = "offline_user_cache"
     private const val KEY_PENDING_SESSIONS = "offline_pending_sessions"
+    private const val KEY_PRE_ADMIN_STATE = "pre_admin_state"
     private val gson = Gson()
 
     fun nowIso(): String {
@@ -125,5 +136,33 @@ object OfflineSessionStore {
         SecurePreferences.getInstance(context).edit()
             .putString(KEY_PENDING_SESSIONS, json)
             .apply()
+    }
+
+    // ─── Pre-Admin State ───────────────────────────────────────────────────────
+
+    fun savePreAdminState(context: Context, state: PreAdminState) {
+        val json = gson.toJson(state)
+        SecurePreferences.getInstance(context).edit()
+            .putString(KEY_PRE_ADMIN_STATE, json)
+            .apply()
+        Log.d(TAG, "PreAdminState saved: locked=${state.wasAdminLocked} kiosk=${state.wasKioskActive}")
+    }
+
+    fun getPreAdminState(context: Context): PreAdminState? {
+        val json = SecurePreferences.getInstance(context).getString(KEY_PRE_ADMIN_STATE, null)
+            ?: return null
+        return try {
+            gson.fromJson(json, PreAdminState::class.java)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse PreAdminState: ${e.message}")
+            null
+        }
+    }
+
+    fun clearPreAdminState(context: Context) {
+        SecurePreferences.getInstance(context).edit()
+            .remove(KEY_PRE_ADMIN_STATE)
+            .apply()
+        Log.d(TAG, "PreAdminState cleared")
     }
 }

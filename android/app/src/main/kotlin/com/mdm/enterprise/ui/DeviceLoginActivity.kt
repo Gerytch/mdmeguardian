@@ -21,12 +21,14 @@ import androidx.lifecycle.lifecycleScope
 import com.mdm.enterprise.R
 import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.MdmApiClient
+import com.mdm.enterprise.services.MdmPolicyService
 import com.mdm.enterprise.api.models.DeviceUserCacheEntry
 import com.mdm.enterprise.api.models.DeviceUserLoginRequest
 import com.mdm.enterprise.api.models.DeviceUserLoginResponse
 import com.mdm.enterprise.services.UserActivityMonitorService
 import com.mdm.enterprise.utils.OfflineSessionStore
 import com.mdm.enterprise.utils.PendingOfflineSession
+import com.mdm.enterprise.utils.PreAdminState
 import com.mdm.enterprise.utils.SecurePreferences
 import com.mdm.enterprise.utils.getStr
 import java.util.UUID
@@ -173,6 +175,12 @@ class DeviceLoginActivity : AppCompatActivity() {
                             .putBoolean(PREF_SESSION_OFFLINE, false)
                             .apply()
                         Log.i(TAG, "Login online OK: ${r.fullName} session=${r.sessionId}")
+                        // Check if this is a device admin user (from cache)
+                        val cachedUser = OfflineSessionStore.getUserCache(this@DeviceLoginActivity)
+                            .firstOrNull { it.id == r.deviceUserId }
+                        if (cachedUser?.isDeviceAdmin == true) {
+                            applyAdminBypass()
+                        }
                         startSessionMonitor()
                         stopLockTask()
                         finish()
@@ -200,11 +208,15 @@ class DeviceLoginActivity : AppCompatActivity() {
                             .putBoolean(PREF_SESSION_OFFLINE, true)
                             .apply()
                         Log.i(TAG, "Login OFFLINE OK: ${user.fullName} offlineId=$offlineId")
-                        android.widget.Toast.makeText(
-                            this@DeviceLoginActivity,
-                            "Modo offline — sessão será sincronizada quando houver rede",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                        if (user.isDeviceAdmin) {
+                            applyAdminBypass()
+                        } else {
+                            android.widget.Toast.makeText(
+                                this@DeviceLoginActivity,
+                                "Modo offline — sessão será sincronizada quando houver rede",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
                         startSessionMonitor()
                         stopLockTask()
                         finish()
@@ -229,6 +241,36 @@ class DeviceLoginActivity : AppCompatActivity() {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(dismissReceiver, filter)
         }
+    }
+
+    private fun applyAdminBypass() {
+        val prefs = SecurePreferences.getInstance(this)
+        val kioskPrefs = getSharedPreferences("mdm_kiosk", Context.MODE_PRIVATE)
+        val kioskHiddenApps = kioskPrefs.getStringSet("kiosk_hidden_apps", emptySet()) ?: emptySet()
+        val kioskMode = prefs.getString("current_kiosk_mode", "whitelist") ?: "whitelist"
+        val wasAdminLocked = AdminLockActivity.isActive(this)
+
+        OfflineSessionStore.savePreAdminState(
+            this,
+            PreAdminState(
+                wasAdminLocked    = wasAdminLocked,
+                adminLockMessage  = prefs.getStr("admin_lock_message")  ?: "",
+                adminLockContact  = prefs.getStr("admin_lock_contact")  ?: "",
+                adminLockSeverity = prefs.getStr("admin_lock_severity") ?: "warning",
+                wasKioskActive    = kioskHiddenApps.isNotEmpty(),
+                kioskHiddenApps   = kioskHiddenApps.toList(),
+                kioskMode         = kioskMode,
+            )
+        )
+
+        if (kioskHiddenApps.isNotEmpty()) {
+            MdmPolicyService(this).disableKioskMode()
+        }
+        if (wasAdminLocked) {
+            AdminLockActivity.release(this)
+            sendBroadcast(Intent("com.mdm.enterprise.ADMIN_UNLOCK"))
+        }
+        Log.i(TAG, "Admin bypass applied: locked=$wasAdminLocked kiosk=${kioskHiddenApps.isNotEmpty()}")
     }
 
     private fun tryOfflineLogin(username: String, pin: String): LoginResult {

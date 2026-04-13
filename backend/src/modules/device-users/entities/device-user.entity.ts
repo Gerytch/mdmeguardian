@@ -15,6 +15,7 @@ export class DeviceUser {
   @Column({ type: 'varchar', length: 100, nullable: true }) department: string | null
   @Column({ type: 'varchar', length: 100, nullable: true }) jobTitle: string | null
   @Column({ type: 'varchar', length: 512, nullable: true }) photoUrl: string | null
+  @Column({ type: 'boolean', default: false }) isDeviceAdmin: boolean
   @Column({ type: 'enum', enum: DeviceUserStatus, default: DeviceUserStatus.ACTIVE }) status: DeviceUserStatus
   @Column({ type: 'timestamptz', nullable: true }) lastLoginAt: Date | null
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date

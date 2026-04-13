@@ -12,6 +12,7 @@ type DeviceUser = {
   jobTitle?: string
   department?: string
   photoUrl?: string
+  isDeviceAdmin?: boolean
   status: 'ACTIVE' | 'INACTIVE'
   lastLoginAt?: string
   createdAt: string
@@ -24,8 +25,10 @@ const DEFAULT_FORM = {
   jobTitle: '',
   department: '',
   photoUrl: '',
+  isDeviceAdmin: false,
 }
 type FormState = typeof DEFAULT_FORM
+type SetForm = (key: keyof FormState, value: string | boolean) => void
 
 function Avatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   if (photoUrl) return <img src={photoUrl} alt={name} className="w-8 h-8 rounded-full object-cover" />
@@ -75,7 +78,7 @@ export default function DeviceUsersPage() {
   const [pinError, setPinError] = useState('')
 
   const tenantId = getTenantId()
-  const set = (key: keyof FormState, value: string) => setForm(f => ({ ...f, [key]: value }))
+  const set: SetForm = (key, value) => setForm(f => ({ ...f, [key]: value }))
 
   const load = () => {
     if (!tenantId) return
@@ -101,6 +104,7 @@ export default function DeviceUsersPage() {
       jobTitle: u.jobTitle ?? '',
       department: u.department ?? '',
       photoUrl: u.photoUrl ?? '',
+      isDeviceAdmin: u.isDeviceAdmin ?? false,
     })
     setError('')
     setShowModal(true)
@@ -123,6 +127,7 @@ export default function DeviceUsersPage() {
         const data: any = {
           fullName: form.fullName,
           username: form.username,
+          isDeviceAdmin: form.isDeviceAdmin,
           jobTitle: form.jobTitle || undefined,
           department: form.department || undefined,
           photoUrl: form.photoUrl || undefined,
@@ -130,10 +135,12 @@ export default function DeviceUsersPage() {
         await deviceUsersApi.update(tenantId, editUser.id, data)
       } else {
         if (!form.pin) { setError('PIN é obrigatório'); setSaving(false); return }
+        if (form.isDeviceAdmin && form.pin.length < 6) { setError('PIN de admin deve ter pelo menos 6 dígitos'); setSaving(false); return }
         const data: any = {
           fullName: form.fullName,
           username: form.username,
           pin: form.pin,
+          isDeviceAdmin: form.isDeviceAdmin,
           jobTitle: form.jobTitle || undefined,
           department: form.department || undefined,
           photoUrl: form.photoUrl || undefined,
@@ -167,7 +174,8 @@ export default function DeviceUsersPage() {
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!tenantId || !pinUser) return
-    if (newPin.length < 4) { setPinError('PIN deve ter pelo menos 4 dígitos'); return }
+    const minLen = pinUser.isDeviceAdmin ? 6 : 4
+    if (newPin.length < minLen) { setPinError(`PIN deve ter pelo menos ${minLen} dígitos`); return }
     setPinSaving(true)
     setPinError('')
     try {
@@ -344,6 +352,24 @@ export default function DeviceUsersPage() {
                 />
               </div>
 
+              {/* Admin toggle */}
+              <div className={`rounded-lg border p-3 ${form.isDeviceAdmin ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.isDeviceAdmin as boolean}
+                    onChange={e => set('isDeviceAdmin', e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-800">Administrador de Dispositivo</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Pode acessar o dispositivo offline e bypass de restrições (kiosk, admin lock). PIN mínimo 6 dígitos.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               <div className="flex gap-3 pt-2 pb-2">
                 <button
                   type="button"
@@ -466,7 +492,17 @@ export default function DeviceUsersPage() {
                       <div className="flex items-center gap-3">
                         <Avatar name={u.fullName} photoUrl={u.photoUrl} />
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{u.fullName}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">{u.fullName}</p>
+                            {u.isDeviceAdmin && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                                Admin
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-400 font-mono">{u.username}</p>
                         </div>
                       </div>

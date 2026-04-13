@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsUrl, Matches } from 'class-validator'
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsUrl, IsBoolean, Matches } from 'class-validator'
 import { DeviceUserStatus } from '../entities/device-user.entity'
 
 export class CreateDeviceUserDto {
@@ -12,6 +12,10 @@ export class CreateDeviceUserDto {
 
   @Matches(/^\d{4,6}$/, { message: 'PIN must be 4-6 digits' })
   pin: string
+
+  @IsOptional()
+  @IsBoolean()
+  isDeviceAdmin?: boolean
 
   @IsOptional()
   @IsString()
@@ -36,6 +40,10 @@ export class UpdateDeviceUserDto {
   @IsString()
   @IsNotEmpty()
   fullName?: string
+
+  @IsOptional()
+  @IsBoolean()
+  isDeviceAdmin?: boolean
 
   @IsOptional()
   @IsString()
