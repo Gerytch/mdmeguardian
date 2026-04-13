@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { authApi } from '@/lib/api'
 import { saveTokens } from '@/lib/auth'
 
@@ -78,12 +77,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Não tem uma conta?{' '}
-          <Link href="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-            Cadastre sua empresa
-          </Link>
-        </p>
       </div>
     </div>
   )
