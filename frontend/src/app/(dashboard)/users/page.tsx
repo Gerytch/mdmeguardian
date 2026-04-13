@@ -107,8 +107,8 @@ export default function UsersPage() {
         firstName: form.firstName,
         lastName: form.lastName,
         role: form.role,
-        isActive: form.isActive,
         canAccessDevices: form.canAccessDevices,
+        ...(editUser ? { isActive: form.isActive } : {}),
       }
       if (form.canAccessDevices) {
         payload.deviceUsername = form.deviceUsername || form.email.split('@')[0]
