@@ -6,13 +6,13 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  HttpException,
   Request,
   Headers,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
@@ -33,13 +33,12 @@ export class AuthController {
     return this.authService.login(dto, tenantId);
   }
 
-  /** POST /api/v1/auth/register — creates tenant + admin user */
+  /** POST /api/v1/auth/register — disabled (single-tenant deployment) */
   @Public()
   @Post('register')
-  @HttpCode(HttpStatus.CREATED)
-  @Throttle({ global: { ttl: 3600000, limit: 5 } })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  @HttpCode(HttpStatus.GONE)
+  register() {
+    throw new HttpException('Registration is disabled on this instance', HttpStatus.GONE);
   }
 
   /** POST /api/v1/auth/refresh */
