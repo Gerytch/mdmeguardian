@@ -220,12 +220,10 @@ class CommandPollingService : Service() {
 
         Log.i(TAG, "Fetched ${commands.size} pending command(s)")
 
-        // Wake the screen so device-admin APIs work regardless of lock state
+        // Keep CPU alive during command execution without lighting the screen
         val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
         val cmdWakeLock = pm.newWakeLock(
-            android.os.PowerManager.FULL_WAKE_LOCK or
-            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-            android.os.PowerManager.ON_AFTER_RELEASE,
+            android.os.PowerManager.PARTIAL_WAKE_LOCK,
             "MDM:cmdExec"
         )
         cmdWakeLock.acquire(60_000L) // max 60s safety timeout
