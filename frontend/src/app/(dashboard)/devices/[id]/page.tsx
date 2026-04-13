@@ -64,6 +64,7 @@ export default function DeviceDetailPage() {
   const [netTestDone, setNetTestDone]         = useState(false)
   const [netTestWifi, setNetTestWifi]         = useState<any[]>([])
   const [netTestConnected, setNetTestConnected] = useState<any | null>(null)
+  const [netTestDownloadMbps, setNetTestDownloadMbps] = useState<number | null>(null)
 
   // Update Agent modal state
   const [showUpdateAgent, setShowUpdateAgent] = useState(false)
@@ -305,6 +306,7 @@ export default function DeviceDetailPage() {
           if (r.screenshotUrl)    setNetTestScreenshot(r.screenshotUrl as string)
           if (r.wifiNetworks)     setNetTestWifi(r.wifiNetworks as any[])
           if (r.connectedNetwork) setNetTestConnected(r.connectedNetwork)
+          if (r.downloadMbps != null) setNetTestDownloadMbps(r.downloadMbps as number)
           if (cmd.status === 'EXECUTED' || cmd.status === 'FAILED') stop()
         } catch { /* ignore */ }
       }, 2000)
@@ -1062,6 +1064,19 @@ export default function DeviceDetailPage() {
                     <div><span className="text-gray-400">Velocidade</span><br /><span className="font-medium">{netTestConnected.linkSpeed} Mbps</span></div>
                     <div><span className="text-gray-400">IP</span><br /><span className="font-medium font-mono">{netTestConnected.ipAddress}</span></div>
                   </div>
+                </div>
+              )}
+
+              {/* Download speed card (fast.com) */}
+              {netTestDownloadMbps != null && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">Velocidade de Download</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Medido via fast.com</p>
+                  </div>
+                  <span className="text-2xl font-bold text-green-700">
+                    {netTestDownloadMbps.toFixed(1)} <span className="text-base font-medium">Mbps</span>
+                  </span>
                 </div>
               )}
 
