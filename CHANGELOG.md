@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.11.0] — 2026-04-13 — APK 1.9.0 (versionCode 37)
+
+### Summary
+Login offline completo: usuários de dispositivo podem autenticar sem rede usando PIN validado localmente (bcrypt cache). Sessões offline são armazenadas no dispositivo e sincronizadas automaticamente com o backend assim que a conectividade é restaurada.
+
+### Added
+- **`android/utils/OfflineSessionStore.kt`**: gerencia cache de usuários (pinHash) e fila de sessões pendentes em SecurePreferences; validação bcrypt local com `at.favre.lib:bcrypt:0.9.0`
+- **`backend/device-user-auth` GET /users**: endpoint retorna device users com pinHash para cache no Android
+- **`backend/device-user-auth` POST /sync-offline**: importa sessões offline retroativamente; idempotente por `offlineSessionId`
+- **`database/migrations/002_offline_sessions.sql`**: colunas `is_offline` e `offline_session_id` na tabela `device_sessions`
+
+### Changed
+- **`DeviceLoginActivity.kt`**: tenta login na API primeiro; se rede falhar → valida bcrypt local → cria sessão offline com UUID local e toast informativo
+- **`CommandPollingService.kt`**: `ConnectivityManager.NetworkCallback` dispara sync de sessões + refresh do cache de usuários ao reconectar; também sincroniza no próximo poll bem-sucedido como fallback; sessões offline não passam por `validateSession`
+- **`UserActivityMonitorService.kt`**: timeout em sessão offline grava `endedAt/endedReason` localmente (em vez de chamar API)
+- **`DeviceSession` entity**: campos `isOffline: boolean` + `offlineSessionId: string | null`
+
+### Decisions
+- Erro HTTP 4xx (credenciais inválidas) não aciona fallback offline — evita burlar autenticação real
+- Sync é idempotente: re-sync após falha parcial não duplica sessões no banco
+- Cache de usuários é atualizado pelo NetworkCallback (imediato ao reconectar) e mantido em SecurePreferences (criptografado)
+
 ## [0.10.0] — 2026-04-12 — APK 1.6.0 (versionCode 30)
 
 ### Summary
