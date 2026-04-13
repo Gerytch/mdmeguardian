@@ -93,6 +93,21 @@ class AdminLockActivity : AppCompatActivity() {
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             stopLockTask()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // API 26+: request keyguard dismiss — no interaction needed on Device Owner
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                km.requestDismissKeyguard(this@AdminLockActivity, null)
+            } else {
+                // API 25: go directly to home screen to avoid the keyguard
+                startActivity(
+                    Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                )
+            }
+
             finish()
         }
     }
