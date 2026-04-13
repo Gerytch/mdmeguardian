@@ -243,10 +243,19 @@ class CommandPollingService : Service() {
                     "REBOOT" -> policyService.reboot()
 
                     "ADMIN_LOCK" -> {
+                        // Admin lock must wake the screen to show the lock activity
+                        val screenWl = pm.newWakeLock(
+                            android.os.PowerManager.FULL_WAKE_LOCK or
+                            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                            android.os.PowerManager.ON_AFTER_RELEASE,
+                            "MDM:adminLockWake"
+                        )
+                        screenWl.acquire(10_000L)
                         val message  = command.payload["message"]  as? String ?: "Leve este dispositivo ao setor de TI"
                         val contact  = command.payload["contact"]  as? String
                         val severity = command.payload["severity"] as? String ?: "warning"
                         policyService.adminLock(message, contact, severity)
+                        if (screenWl.isHeld) screenWl.release()
                     }
 
                     "ADMIN_UNLOCK" -> policyService.adminUnlock()
