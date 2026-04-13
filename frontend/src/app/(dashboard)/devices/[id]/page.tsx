@@ -398,12 +398,12 @@ export default function DeviceDetailPage() {
             <h1 className="text-2xl font-bold text-gray-900">{device.name}</h1>
             <button
               onClick={() => { setRenameValue(device.name); setShowRename(true) }}
-              title="Renomear dispositivo"
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 border border-gray-300 rounded-md hover:bg-gray-100 hover:text-gray-700 transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
               </svg>
+              Renomear
             </button>
           </div>
           <div className="flex items-center gap-2 mt-1">
