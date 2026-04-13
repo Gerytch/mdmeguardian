@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.13.0] — 2026-04-13 — APK 2.1.0 (versionCode 39)
+
+### Summary
+Usuários da equipe de T.I. agora têm acesso unificado: um único cadastro permite login no painel web (email + senha) e acesso direto a dispositivos bloqueados/kiosk (username + PIN). Sessões admin no dispositivo são transientes e não interferem com o rastreamento de sessões operacionais.
+
+### Added
+- **database/migrations/004**: colunas `can_access_devices`, `device_username`, `device_pin_hash` na tabela `users`
+- **backend/users entity/DTO/service**: campos de acesso a dispositivos; `findByDeviceCredentials`; `findAllWithDevicePinHash`; hash automático do PIN no create/update
+- **backend/device-user-auth**: tenta `device_users` (operacional) primeiro; se não encontrar, tenta `users` com `canAccessDevices=true`; sessões admin usam prefixo `adm_` e não são gravadas em `device_sessions`; `validateSession`/`logout`/`timeout` tratam sessões `adm_` graciosamente
+- **frontend/src/app/(dashboard)/users/page.tsx**: CRUD completo de usuários T.I. com toggle "Acesso a dispositivos" e campo PIN
+- **frontend/Sidebar**: link "Equipe T.I." → `/users`
+- **android ApiModels**: campo `sessionType` ("operational" | "admin") em `DeviceUserLoginResponse`
+- **android DeviceLoginActivity**: `PREF_SESSION_TYPE` salvo na sessão; bypass decidido por `sessionType=="admin"` (não mais por lookup no cache)
+
+### Changed
+- **device-user-auth.module**: importa `UsersModule`
+- **android DeviceLoginActivity**: sessão offline deriva `sessionType` do flag `isDeviceAdmin` do cache
+
+## [0.12.0] — 2026-04-13 — APK 2.0.0 (versionCode 38)
+
+### Summary
+Usuários marcados como `isDeviceAdmin` na tabela `device_users` podem logar em dispositivos bloqueados ou em kiosk, suspendendo temporariamente o lock/kiosk e restaurando o estado anterior ao sair.
+
+### Added
+- **database/migrations/003**: coluna `is_device_admin` em `device_users`
+- **android AdminLockActivity**: botão "⚙ Acesso T.I." abre `DeviceLoginActivity` dentro do lock task
+- **android DeviceLoginActivity**: `applyAdminBypass()` salva `PreAdminState` e libera lock/kiosk para usuários admin
+- **android OfflineSessionStore**: `savePreAdminState`, `getPreAdminState`, `clearPreAdminState`
+- **android CommandPollingService**: watchdog restaura estado (lock/kiosk) quando sessão admin encerra
+- **frontend device-users**: toggle `isDeviceAdmin` no modal de criação/edição
+
+---
+
 ## [0.11.0] — 2026-04-13 — APK 1.9.0 (versionCode 37)
 
 ### Summary
