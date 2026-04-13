@@ -6,5 +6,5 @@ ALTER TABLE users
 
 -- device_username must be unique per tenant when set
 CREATE UNIQUE INDEX IF NOT EXISTS users_device_username_tenant_idx
-  ON users (tenant_id, device_username)
+  ON users ("tenantId", device_username)
   WHERE device_username IS NOT NULL;
