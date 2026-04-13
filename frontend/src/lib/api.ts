@@ -141,3 +141,8 @@ export const deviceGroupsApi = {
   removeDevice: (tenantId: string, groupId: string, deviceId: string) =>
     api.delete(`/tenants/${tenantId}/device-groups/${groupId}/devices/${deviceId}`),
 }
+
+export const usersApi = {
+  changePassword: (tenantId: string, userId: string, currentPassword: string, newPassword: string) =>
+    api.patch(`/tenants/${tenantId}/users/${userId}/change-password`, { currentPassword, newPassword }),
+}
