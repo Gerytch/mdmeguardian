@@ -198,6 +198,26 @@ O E.Guardian precisa ser Device Owner para:
 | Device transferido de política lock para unlock permanecia lockado | `syncAdminLockForNewDevice()` só tratava o sentido lock→lock | Mesmo método agora verifica se o device em si está lockado (`deviceLastLock > deviceLastUnlock`) e envia `ADMIN_UNLOCK` se a nova política não está lockada |
 | GPS não aparecia no mapa após ativar rastreamento na política | `LocationTrackingWorker` falhava antes de chamar a API por checar `jwt_token` (nunca salvo no device); `applyPolicy()` nunca iniciava o worker ao aplicar a política | Removido `jwt_token` do worker (endpoint é `@Public()`); adicionado bloco location tracking em `applyPolicy()` que agenda o worker + dispara fix imediato |
 | `UPDATE_POLICY` não chegava em API34/36 sem abrir o app | `foregroundServiceType="dataSync"` tem quota de 6h/dia no Android 14+ — OS matava o `CommandPollingService` silenciosamente após a quota | Trocado para `specialUse` (sem quota); `CommandPollingService.start()` adicionado ao `MdmApplication.onCreate()`; `CommandPollingWorker` virou watchdog que reinicia o serviço a cada 15 min |
+| Comandos não executavam com tela apagada | Certas device-admin APIs requerem CPU ativo; service podia ser suspenso | `PARTIAL_WAKE_LOCK` adquirido no `pollCommands()` antes de executar — mantém CPU sem acender tela |
+| `ADMIN_LOCK` não aparecia com tela apagada | `PARTIAL_WAKE_LOCK` não acende a tela | Case `ADMIN_LOCK` adquire `FULL_WAKE_LOCK + ACQUIRE_CAUSES_WAKEUP` especificamente antes de chamar `adminLock()` |
+| Após `ADMIN_UNLOCK` o keyguard aparecia e exigia interação | `finish()` da `AdminLockActivity` devolvia foco ao keyguard do Android | `unlockReceiver.onReceive` chama `requestDismissKeyguard()` (API 26+) ou `ACTION_HOME` (API 25) antes de `finish()` |
+| Comandos não chegavam após reboot sem unlock | `BOOT_COMPLETED` só dispara após primeiro unlock; service não iniciava antes | Direct Boot: `BootPrefs` (device-protected storage) espelha credenciais no enrollment; `LOCKED_BOOT_COMPLETED` inicia o service antes do unlock; `CommandPollingService` + `MdmApiClient` fazem fallback para `BootPrefs` quando `SecurePreferences` indisponível |
+| Velocidade de download não medida no teste de rede | `NetworkTestExecutor` só coletava dados Wi-Fi (SSID, RSSI, redes próximas) | Adicionado `measureDownloadSpeedMbps()`: busca token do fast.com no JS, chama API, faz download por 8s e calcula Mbps; frontend exibe card verde "X.X Mbps / Medido via fast.com" |
+
+---
+
+## Frontend — Tela Minha Conta (`/conta`)
+- Perfil: avatar com inicial, nome completo, email, role badge (read-only)
+- Alterar Senha: form com `currentPassword`, `newPassword`, `confirmPassword`; validação de match + min 8 chars
+- API: `PATCH /tenants/:id/users/:id/change-password` com `{ currentPassword, newPassword }`
+- Erro mapeado: `"Current password is incorrect"` → "Senha atual incorreta."
+- Link "Minha Conta" na sidebar (seção inferior, com estado ativo)
+
+## Android — Direct Boot (`BootPrefs`)
+- `BootPrefs.kt`: device-protected SharedPreferences com `device_token`, `device_id`, `tenant_id`, `server_url`
+- Populado no enrollment (todos os 3 fluxos: QR, ADB, dev)
+- Lido em `LOCKED_BOOT_COMPLETED`, `CommandPollingService.pollCommands()` e `MdmApiClient.buildClient()`
+- Devices já enrollados precisam de re-enrollment OU receber UPDATE_AGENT para popular o `BootPrefs`
 
 ---
 
