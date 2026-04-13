@@ -220,6 +220,17 @@ class CommandPollingService : Service() {
 
         Log.i(TAG, "Fetched ${commands.size} pending command(s)")
 
+        // Wake the screen so device-admin APIs work regardless of lock state
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val cmdWakeLock = pm.newWakeLock(
+            android.os.PowerManager.FULL_WAKE_LOCK or
+            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+            android.os.PowerManager.ON_AFTER_RELEASE,
+            "MDM:cmdExec"
+        )
+        cmdWakeLock.acquire(60_000L) // max 60s safety timeout
+
+        try {
         for (command in commands) {
             Log.i(TAG, "Executing: ${command.type} (${command.id})")
             var success = true
@@ -414,6 +425,9 @@ class CommandPollingService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to ACK command ${command.id}: ${e.message}")
             }
+        }
+        } finally {
+            if (cmdWakeLock.isHeld) cmdWakeLock.release()
         }
     }
 
