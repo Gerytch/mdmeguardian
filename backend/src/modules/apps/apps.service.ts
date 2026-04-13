@@ -161,26 +161,40 @@ export class AppsService {
   }
 
   async syncFromDevice(tenantId: string, apps: { packageName: string; name: string }[]): Promise<void> {
-    for (const app of apps) {
-      const existing = await this.appRepository.findOne({
-        where: { tenantId, packageName: app.packageName },
-      });
-      if (existing) {
-        // Update only the display name — never touch isSystem so manually
-        // catalogued apps (isSystem=false) keep their flag after device sync.
-        existing.name = app.name;
-        await this.appRepository.save(existing);
-      } else {
-        await this.appRepository.save(
-          this.appRepository.create({
-            tenantId,
-            packageName: app.packageName,
-            name: app.name,
-            version: '0',
-            isSystem: true,
-          }),
-        );
-      }
+    if (apps.length === 0) return;
+
+    // One SELECT to find what already exists
+    const existing = await this.appRepository.find({
+      where: { tenantId },
+      select: ['packageName', 'name'],
+    });
+    const existingMap = new Map(existing.map(a => [a.packageName, a.name]));
+
+    const toInsert = apps.filter(a => !existingMap.has(a.packageName));
+    const toUpdate = apps.filter(a => existingMap.has(a.packageName) && existingMap.get(a.packageName) !== a.name);
+
+    // Batch-insert new apps — ON CONFLICT DO NOTHING guards against race conditions
+    // when two devices sync simultaneously. isSystem starts as true for discovered apps.
+    if (toInsert.length > 0) {
+      await this.appRepository
+        .createQueryBuilder()
+        .insert()
+        .into(App)
+        .values(toInsert.map(a => ({
+          tenantId,
+          packageName: a.packageName,
+          name: a.name,
+          version: '0',
+          isSystem: true,
+        })))
+        .orIgnore()
+        .execute();
+    }
+
+    // Update display name only — never touch isSystem so manually
+    // catalogued apps (isSystem=false) keep their flag after device sync.
+    for (const app of toUpdate) {
+      await this.appRepository.update({ tenantId, packageName: app.packageName }, { name: app.name });
     }
   }
 }
