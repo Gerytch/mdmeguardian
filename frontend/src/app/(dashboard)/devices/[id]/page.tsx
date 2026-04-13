@@ -71,6 +71,11 @@ export default function DeviceDetailPage() {
   const [agentApkUrl, setAgentApkUrl]         = useState('')
   const [agentVersion, setAgentVersion]       = useState('')
 
+  // Rename device modal state
+  const [showRename, setShowRename]   = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [renaming, setRenaming]       = useState(false)
+
   // Delete device modal state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -340,6 +345,21 @@ export default function DeviceDetailPage() {
     return new Date(lastLock.createdAt).getTime() > new Date(lastUnlock.createdAt).getTime()
   })()
 
+  const handleRename = async () => {
+    if (!device || !renameValue.trim() || renameValue.trim() === device.name) return
+    setRenaming(true)
+    try {
+      const updated = await devicesApi.update(tenantId, device.id, { name: renameValue.trim() })
+      setDevice(updated)
+      setShowRename(false)
+      setMsg({ type: 'success', text: 'Nome atualizado — comando RENAME_DEVICE despachado ao dispositivo.' })
+    } catch {
+      setMsg({ type: 'error', text: 'Erro ao renomear o dispositivo.' })
+    } finally {
+      setRenaming(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!device) return
     setDeleting(true)
@@ -374,7 +394,18 @@ export default function DeviceDetailPage() {
           </svg>
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{device.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">{device.name}</h1>
+            <button
+              onClick={() => { setRenameValue(device.name); setShowRename(true) }}
+              title="Renomear dispositivo"
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" />
+              </svg>
+            </button>
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${device.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
             <span className="text-sm text-gray-500">{device.isOnline ? 'Online' : 'Offline'}</span>
@@ -390,6 +421,41 @@ export default function DeviceDetailPage() {
           Remover
         </button>
       </div>
+
+      {/* Rename device modal */}
+      {showRename && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Renomear dispositivo</h3>
+            <input
+              autoFocus
+              type="text"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setShowRename(false) }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Nome do dispositivo"
+            />
+            <p className="text-xs text-gray-400 mb-4">O novo nome será sincronizado com o dispositivo via comando RENAME_DEVICE.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRename(false)}
+                disabled={renaming}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRename}
+                disabled={renaming || !renameValue.trim() || renameValue.trim() === device.name}
+                className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+              >
+                {renaming ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (
