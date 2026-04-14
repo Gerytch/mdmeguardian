@@ -135,6 +135,24 @@
                 android:layout_marginTop="4dp" />
 
             <TextView
+                android:id="@+id/tvDeviceName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nome: —"
+                android:textSize="13sp"
+                android:textColor="#374151"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/tvAgentVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Versão do agente: —"
+                android:textSize="13sp"
+                android:textColor="#374151"
+                android:layout_marginTop="4dp" />
+
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Comandos verificados a cada 15 minutos. Localização rastreada conforme política."

@@ -320,6 +320,12 @@ class MainActivity : AppCompatActivity() {
             tvDeviceOwner.text = ownerStatus
             tvServerUrl.text = "Servidor: ${prefs.getStr("server_url") ?: "Não configurado"}"
 
+            val tvDeviceName    = findViewById<TextView>(R.id.tvDeviceName)
+            val tvAgentVersion  = findViewById<TextView>(R.id.tvAgentVersion)
+            val deviceName      = prefs.getString("device_name", null)
+            tvDeviceName.text   = "Nome: ${if (!deviceName.isNullOrBlank()) deviceName else "—"}"
+            tvAgentVersion.text = "Versão do agente: v${com.mdm.enterprise.BuildConfig.VERSION_NAME}"
+
             // Device user auth: show login if required and no active session
             val authRequired = prefs.getStr("device_user_auth_required") == "true"
             if (authRequired && !DeviceLoginActivity.hasActiveSession(this)) {
