@@ -93,29 +93,11 @@ class DeviceLoginActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             dismissedByPolicy = true
             stopLockTask()
-            // Clear FLAG_KEEP_SCREEN_ON before lockNow() — otherwise the window holds the screen
-            // on and lockNow() has no effect (same reason postLoginRequiredAlert works: no window)
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            val localDpm = dpm
-            val localAdmin = adminComponent
-            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             finish()
-            // Same pattern as postLoginRequiredAlert: lockNow → 700ms → wake + re-enable keyguard
-            try { localDpm.lockNow() } catch (_: Exception) {}
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    @Suppress("DEPRECATION")
-                    val wl = pm.newWakeLock(
-                        android.os.PowerManager.FULL_WAKE_LOCK or
-                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                        android.os.PowerManager.ON_AFTER_RELEASE,
-                        "MDM:authDisabledWake"
-                    )
-                    wl.acquire(5000L)
-                    wl.release()
-                    localDpm.setKeyguardDisabled(localAdmin, false)
-                } catch (_: Exception) {}
-            }, 700L)
+            // Palliative: reboot the device so it comes back cleanly to home screen
+            try {
+                dpm.reboot(adminComponent)
+            } catch (_: Exception) {}
         }
     }
 
@@ -336,26 +318,8 @@ class DeviceLoginActivity : AppCompatActivity() {
         if (!authRequired) {
             dismissedByPolicy = true
             stopLockTask()
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            val localDpm = dpm
-            val localAdmin = adminComponent
-            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             finish()
-            try { localDpm.lockNow() } catch (_: Exception) {}
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    @Suppress("DEPRECATION")
-                    val wl = pm.newWakeLock(
-                        android.os.PowerManager.FULL_WAKE_LOCK or
-                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                        android.os.PowerManager.ON_AFTER_RELEASE,
-                        "MDM:authDisabledWake"
-                    )
-                    wl.acquire(5000L)
-                    wl.release()
-                    localDpm.setKeyguardDisabled(localAdmin, false)
-                } catch (_: Exception) {}
-            }, 700L)
+            try { dpm.reboot(adminComponent) } catch (_: Exception) {}
             return
         }
     }
