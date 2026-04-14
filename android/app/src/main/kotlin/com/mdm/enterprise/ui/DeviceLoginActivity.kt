@@ -330,13 +330,14 @@ class DeviceLoginActivity : AppCompatActivity() {
     @Deprecated("required override")
     override fun onBackPressed() { /* intentionally blocked */ }
 
-    // Lock task mode suppresses accessibility events, so touches on this activity never reach
-    // MdmAccessibilityService. Manually record activity here to keep the inactivity timer alive.
-    override fun onTouchEvent(event: android.view.MotionEvent?): Boolean {
-        if (event?.action == android.view.MotionEvent.ACTION_DOWN) {
+    // Lock task mode suppresses accessibility events — touches on this activity never reach
+    // MdmAccessibilityService. Use dispatchTouchEvent (not onTouchEvent) so ALL touches are
+    // captured before child views (EditText, buttons) consume them.
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev?.action == android.view.MotionEvent.ACTION_DOWN) {
             UserActivityMonitorService.recordActivity()
         }
-        return super.onTouchEvent(event)
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onDestroy() {
