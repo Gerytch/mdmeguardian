@@ -5,13 +5,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.MdmApiClient
 import com.mdm.enterprise.ui.DeviceLoginActivity
 import com.mdm.enterprise.utils.OfflineSessionStore
@@ -49,6 +53,7 @@ class UserActivityMonitorService : Service() {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var monitorJob: Job? = null
     private var timeoutMs = 5 * 60 * 1000L // default 5 min
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -65,7 +70,11 @@ class UserActivityMonitorService : Service() {
         lastActivityMs.set(System.currentTimeMillis())
         Log.i(TAG, "Monitor started. Timeout: ${minutes}min")
 
-        serviceScope.launch {
+        ensureAccessibilityServiceEnabled()
+
+        // Cancel any previous monitor loop before starting a new one
+        monitorJob?.cancel()
+        monitorJob = serviceScope.launch {
             while (isActive) {
                 delay(15_000L) // check every 15 seconds
                 // recordActivity() is called by MdmAccessibilityService on every touch/scroll/click,
@@ -79,6 +88,24 @@ class UserActivityMonitorService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    /** Auto-enables MdmAccessibilityService via Device Owner so touches are detected without manual setup. */
+    private fun ensureAccessibilityServiceEnabled() {
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val admin = ComponentName(this, MdmDeviceAdminReceiver::class.java)
+            val svc = ComponentName(this, MdmAccessibilityService::class.java).flattenToString()
+            val current = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+            if (!current.split(":").contains(svc)) {
+                val updated = if (current.isEmpty()) svc else "$current:$svc"
+                dpm.setSecureSetting(admin, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, updated)
+                dpm.setSecureSetting(admin, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+                Log.i(TAG, "Accessibility service auto-enabled")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not auto-enable accessibility service: ${e.message}")
+        }
     }
 
     private suspend fun handleTimeout() {
