@@ -90,41 +90,29 @@ class DeviceLoginActivity : AppCompatActivity() {
     private var dismissedByPolicy = false
 
     private val dismissReceiver = object : BroadcastReceiver() {
-        @Suppress("DEPRECATION")
         override fun onReceive(context: Context?, intent: Intent?) {
             dismissedByPolicy = true
             stopLockTask()
             val localDpm = dpm
             val localAdmin = adminComponent
-            val pm = getSystemService(android.os.PowerManager::class.java)
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             finish()
-
-            // Step 1: simulate power button press (lock screen) via AccessibilityService (API 28+)
-            // or lockNow() fallback — screen goes off cleanly
-            val locked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                com.mdm.enterprise.services.MdmAccessibilityService.instance
-                    ?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
-                    ?: false
-            } else false
-            if (!locked) {
-                try { localDpm.lockNow() } catch (_: Exception) {}
-            }
-
-            // Step 2: after 1s simulate power button press again (wake screen)
-            // keyguard is still disabled so home appears directly; then re-enable keyguard
+            // Same pattern as postLoginRequiredAlert: lockNow → 700ms → wake + re-enable keyguard
+            try { localDpm.lockNow() } catch (_: Exception) {}
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
+                    @Suppress("DEPRECATION")
                     val wl = pm.newWakeLock(
                         android.os.PowerManager.FULL_WAKE_LOCK or
                         android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
                         android.os.PowerManager.ON_AFTER_RELEASE,
                         "MDM:authDisabledWake"
                     )
-                    wl.acquire(3000L)
+                    wl.acquire(5000L)
                     wl.release()
+                    localDpm.setKeyguardDisabled(localAdmin, false)
                 } catch (_: Exception) {}
-                try { localDpm.setKeyguardDisabled(localAdmin, false) } catch (_: Exception) {}
-            }, 1000L)
+            }, 700L)
         }
     }
 
@@ -347,16 +335,9 @@ class DeviceLoginActivity : AppCompatActivity() {
             stopLockTask()
             val localDpm = dpm
             val localAdmin = adminComponent
-            val pm = getSystemService(android.os.PowerManager::class.java)
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             finish()
-            val locked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                com.mdm.enterprise.services.MdmAccessibilityService.instance
-                    ?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
-                    ?: false
-            } else false
-            if (!locked) {
-                try { localDpm.lockNow() } catch (_: Exception) {}
-            }
+            try { localDpm.lockNow() } catch (_: Exception) {}
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
                     @Suppress("DEPRECATION")
@@ -366,11 +347,11 @@ class DeviceLoginActivity : AppCompatActivity() {
                         android.os.PowerManager.ON_AFTER_RELEASE,
                         "MDM:authDisabledWake"
                     )
-                    wl.acquire(3000L)
+                    wl.acquire(5000L)
                     wl.release()
+                    localDpm.setKeyguardDisabled(localAdmin, false)
                 } catch (_: Exception) {}
-                try { localDpm.setKeyguardDisabled(localAdmin, false) } catch (_: Exception) {}
-            }, 1000L)
+            }, 700L)
             return
         }
     }
