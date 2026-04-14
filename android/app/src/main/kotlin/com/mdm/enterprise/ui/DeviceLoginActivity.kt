@@ -89,6 +89,18 @@ class DeviceLoginActivity : AppCompatActivity() {
     private val dismissReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             stopLockTask()
+            // Dismiss keyguard before finish() so the system doesn't show the lock screen
+            // after setKeyguardDisabled(false) is called in onDestroy(). Same fix as ADMIN_UNLOCK.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val km = getSystemService(android.app.KeyguardManager::class.java)
+                km?.requestDismissKeyguard(this@DeviceLoginActivity, null)
+            } else {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(homeIntent)
+            }
             finish()
         }
     }
