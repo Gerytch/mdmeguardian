@@ -389,28 +389,31 @@ class CommandPollingService : Service() {
                             // Cancel the "Login Necessário" notification in case it was already posted
                             (applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                                 .cancel(4001)
-                            // Simulate power button from Service context (outside lock task mode).
-                            // Brief delay lets the broadcast reach the activity first so it can stopLockTask()+finish().
-                            delay(1_500L)
-                            val dpmSvc = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-                            val adminCompSvc = android.content.ComponentName(applicationContext, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
-                            val pmSvc = applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                            try { dpmSvc.lockNow() } catch (e: Exception) { Log.w(TAG, "lockNow after auth-disable: ${e.message}") }
-                            delay(700L)
-                            try {
-                                @Suppress("DEPRECATION")
-                                val wl = pmSvc.newWakeLock(
-                                    android.os.PowerManager.FULL_WAKE_LOCK or
-                                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                                    android.os.PowerManager.ON_AFTER_RELEASE,
-                                    "MDM:authDisabledWake"
-                                )
-                                wl.acquire(5000L)
-                                wl.release()
-                                dpmSvc.setKeyguardDisabled(adminCompSvc, false)
-                                Log.i(TAG, "Auth disabled: screen woken to home")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Wake after auth-disable failed: ${e.message}")
+                            // Schedule power-simulation in a separate coroutine so it does NOT
+                            // block the command ack. Delays here would throw CancellationException
+                            // and cause the ack to be sent as FAILED even though the policy applied.
+                            scope.launch {
+                                delay(1_500L) // wait for activity to exit lock task
+                                val dpmSvc = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                                val adminCompSvc = android.content.ComponentName(applicationContext, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
+                                val pmSvc = applicationContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                                try { dpmSvc.lockNow() } catch (e: Exception) { Log.w(TAG, "lockNow after auth-disable: ${e.message}") }
+                                delay(700L)
+                                try {
+                                    @Suppress("DEPRECATION")
+                                    val wl = pmSvc.newWakeLock(
+                                        android.os.PowerManager.FULL_WAKE_LOCK or
+                                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                                        android.os.PowerManager.ON_AFTER_RELEASE,
+                                        "MDM:authDisabledWake"
+                                    )
+                                    wl.acquire(5000L)
+                                    wl.release()
+                                    dpmSvc.setKeyguardDisabled(adminCompSvc, false)
+                                    Log.i(TAG, "Auth disabled: screen woken to home")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Wake after auth-disable failed: ${e.message}")
+                                }
                             }
                         }
                         // When deviceUserAuthRequired is true and there's no active session,
