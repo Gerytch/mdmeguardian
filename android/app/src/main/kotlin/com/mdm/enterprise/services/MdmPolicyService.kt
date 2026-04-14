@@ -28,26 +28,43 @@ class MdmPolicyService(private val context: Context) {
     val isDeviceOwner: Boolean get() = dpm.isDeviceOwnerApp(context.packageName)
     val isDeviceAdmin: Boolean get() = dpm.isAdminActive(adminComponent)
 
-    /** Sets the device's friendly name. Best-effort — never throws so the caller's command
-     *  is not marked FAILED if the OS restricts the setting on a given Android version. */
+    /** Sets the device's visible name via BluetoothAdapter.setName() and Settings.Global.
+     *  Best-effort — never throws so the caller's command is never marked FAILED. */
     fun setDeviceName(name: String) {
         if (!isDeviceOwner) return
-        try {
-            // Device Owner path: setGlobalSetting() is allowed on most versions
-            dpm.setGlobalSetting(adminComponent, android.provider.Settings.Global.DEVICE_NAME, name)
-        } catch (e: Exception) {
-            // Some Android versions (or OEM ROMs) don't allow DEVICE_NAME via setGlobalSetting.
-            // Fall back to direct putString — silently no-op if still rejected.
+
+        // API 31+ (Android 12): BLUETOOTH_CONNECT is a runtime permission — auto-grant via Device Owner
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                android.provider.Settings.Global.putString(
-                    context.contentResolver,
-                    android.provider.Settings.Global.DEVICE_NAME,
-                    name,
+                dpm.setPermissionGrantState(
+                    adminComponent,
+                    context.packageName,
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
                 )
-            } catch (e2: Exception) {
-                Log.w(TAG, "setDeviceName: cannot update system device name — best-effort only (${e2.message})")
+            } catch (e: Exception) {
+                Log.w(TAG, "setDeviceName: could not grant BLUETOOTH_CONNECT (${e.message})")
             }
         }
+
+        // BluetoothAdapter.setName() is the reliable way to change the visible device name
+        try {
+            val bt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+            } else {
+                @Suppress("DEPRECATION")
+                android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            }
+            bt?.setName(name)
+            Log.i(TAG, "setDeviceName: BluetoothAdapter name set to \"$name\"")
+        } catch (e: Exception) {
+            Log.w(TAG, "setDeviceName: BluetoothAdapter.setName failed (${e.message})")
+        }
+
+        // Also attempt setGlobalSetting — works on some OEMs, silently ignored on others
+        try {
+            dpm.setGlobalSetting(adminComponent, android.provider.Settings.Global.DEVICE_NAME, name)
+        } catch (_: Exception) { /* device_name not in setGlobalSetting allowlist on most versions */ }
     }
 
     fun applyPolicy(rules: PolicyRules) {
