@@ -304,11 +304,7 @@ class CommandPollingService : Service() {
                     "RENAME_DEVICE" -> {
                         val name = command.payload["name"] as? String
                         if (!name.isNullOrBlank()) {
-                            android.provider.Settings.Global.putString(
-                                applicationContext.contentResolver,
-                                android.provider.Settings.Global.DEVICE_NAME,
-                                name,
-                            )
+                            policyService.setDeviceName(name)
                             Log.i(TAG, "RENAME_DEVICE: device name set to \"$name\"")
                         }
                     }
@@ -357,6 +353,13 @@ class CommandPollingService : Service() {
                             ?: PolicyRules()
 
                         policyService.applyPolicy(rules)
+
+                        // Sync device name — best-effort, same as RENAME_DEVICE
+                        val deviceName = command.payload["deviceName"] as? String
+                        if (!deviceName.isNullOrBlank()) {
+                            policyService.setDeviceName(deviceName)
+                        }
+
                         result["policyId"] = command.payload["policyId"]
 
                         prefs.edit()
@@ -501,11 +504,13 @@ class CommandPollingService : Service() {
             }
 
             try {
-                api.ackCommand(
-                    deviceToken,
-                    command.id,
-                    CommandAckRequest(success = success, result = result, errorMessage = errorMessage),
-                )
+                withContext(NonCancellable) {
+                    api.ackCommand(
+                        deviceToken,
+                        command.id,
+                        CommandAckRequest(success = success, result = result, errorMessage = errorMessage),
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to ACK command ${command.id}: ${e.message}")
             }

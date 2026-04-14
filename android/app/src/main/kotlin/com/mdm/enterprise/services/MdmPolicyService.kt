@@ -28,6 +28,28 @@ class MdmPolicyService(private val context: Context) {
     val isDeviceOwner: Boolean get() = dpm.isDeviceOwnerApp(context.packageName)
     val isDeviceAdmin: Boolean get() = dpm.isAdminActive(adminComponent)
 
+    /** Sets the device's friendly name. Best-effort — never throws so the caller's command
+     *  is not marked FAILED if the OS restricts the setting on a given Android version. */
+    fun setDeviceName(name: String) {
+        if (!isDeviceOwner) return
+        try {
+            // Device Owner path: setGlobalSetting() is allowed on most versions
+            dpm.setGlobalSetting(adminComponent, android.provider.Settings.Global.DEVICE_NAME, name)
+        } catch (e: Exception) {
+            // Some Android versions (or OEM ROMs) don't allow DEVICE_NAME via setGlobalSetting.
+            // Fall back to direct putString — silently no-op if still rejected.
+            try {
+                android.provider.Settings.Global.putString(
+                    context.contentResolver,
+                    android.provider.Settings.Global.DEVICE_NAME,
+                    name,
+                )
+            } catch (e2: Exception) {
+                Log.w(TAG, "setDeviceName: cannot update system device name — best-effort only (${e2.message})")
+            }
+        }
+    }
+
     fun applyPolicy(rules: PolicyRules) {
         Log.i(TAG, "Applying policy: $rules")
 

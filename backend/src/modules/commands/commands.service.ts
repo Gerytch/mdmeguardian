@@ -76,7 +76,7 @@ export class CommandsService {
     if (dto.type === CommandType.UPDATE_POLICY && !dto.payload?.rules) {
       const deviceWithPolicy = await this.deviceRepository.findOne({
         where: { id: dto.deviceId, tenantId },
-        select: ['id', 'policyId'],
+        select: ['id', 'policyId', 'name'],
       });
       if (deviceWithPolicy?.policyId) {
         const policy = await this.policyRepository.findOne({
@@ -94,7 +94,7 @@ export class CommandsService {
               apkUrl: a.apkUrl,
             }));
           }
-          dto.payload = { policyId: policy.id, rules: policy.rules, requiredApps };
+          dto.payload = { policyId: policy.id, rules: policy.rules, requiredApps, deviceName: deviceWithPolicy.name };
         }
       }
     }

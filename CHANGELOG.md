@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.2] — 2026-04-14 — APK 2.4.0 (versionCode 42)
+
+### Summary
+Três bugs corrigidos: RENAME_DEVICE retornava FAILED por `SecurityException` em `Settings.Global.putString`; UPDATE_POLICY ficava preso em SENT quando o job era cancelado antes do ack; UPDATE_POLICY agora também sincroniza o nome do dispositivo para garantir consistência.
+
+### Fixed
+- **`MdmPolicyService.kt`**: `setDeviceName()` agora é best-effort — tenta `setGlobalSetting`, fallback para `putString`, nunca propaga exceção (RENAME_DEVICE não vira FAILED por restrição de API do Android)
+- **`CommandPollingService.kt`**: ack de comando encapsulado em `withContext(NonCancellable)` — garante que o ack é enviado mesmo se o polling job for cancelado (UPDATE_POLICY não fica mais preso em SENT)
+- **`commands.service.ts`**: UPDATE_POLICY auto-populate agora seleciona `name` do device e inclui `deviceName` no payload
+- **`CommandPollingService.kt`**: handler UPDATE_POLICY chama `policyService.setDeviceName(deviceName)` — nome sincronizado a cada policy update, não só via RENAME_DEVICE
+
+### Decisions
+- `setDeviceName` best-effort: o nome no backend já está correto após rename; a sincronização pro Android é conveniência (Bluetooth/Wi-Fi name), não bloqueante
+- UPDATE_POLICY carrega `deviceName` no payload pois é o comando mais frequente e garante re-sync mesmo se RENAME_DEVICE foi perdido por device offline
+
+---
+
+## [0.14.1] — 2026-04-13 — APK 2.3.0 (versionCode 41)
+
+### Summary
+Dois bugs críticos corrigidos: tela de login aparecia e sumia imediatamente (notificação infinita como consequência), e UPDATE_AGENT era cancelado quando o device ficava offline impedindo atualização do agente.
+
+### Fixed
+- **`CommandPollingService.kt`**: `postLoginRequiredAlert()` removia timer de 3s `setKeyguardDisabled(false)` que matava `DeviceLoginActivity` logo após o launch; watchdog substituiu flag `lockFired` por cooldown de 5s — relança activity quando necessário sem spam de notificação 4001
+- **`DeviceLoginActivity.kt`**: `onDestroy()` agora chama `setKeyguardDisabled(false)` para restaurar keyguard apenas quando o usuário sai (login bem-sucedido ou broadcast DISMISS_LOGIN)
+- **`devices.service.ts`**: `markOfflineStaleDevices()` não cancela mais comandos `UPDATE_AGENT` quando device vai offline — o comando persiste como PENDING e executa ao reconectar
+
+### Decisions
+- Keyguard lifecycle gerenciado pela própria `DeviceLoginActivity` (onDestroy), não por timer externo — evita race condition entre timer e lifecycle da activity
+- `UPDATE_AGENT` é o único tipo isento do cancel-on-offline; outros tipos efêmeros (LOCATE, SEND_MESSAGE) ainda são cancelados
+
+---
+
 ## [0.14.0] — 2026-04-13 — APK 2.2.0 (versionCode 40)
 
 ### Summary
