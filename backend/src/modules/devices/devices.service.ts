@@ -231,15 +231,17 @@ export class DevicesService {
       .whereInIds(staleIds)
       .execute();
 
-    // Cancel PENDING commands for devices that just went offline
+    // Cancel PENDING commands for devices that just went offline.
+    // UPDATE_AGENT is exempt: it must survive so the device receives it when it reconnects.
+    const exemptTypes: CommandType[] = [CommandType.UPDATE_AGENT];
     await this.commandRepository
       .createQueryBuilder()
       .update(Command)
       .set({ status: CommandStatus.FAILED, result: () => `'{"cancelled":true,"reason":"device_offline"}'::jsonb` })
-      .where('deviceId IN (:...staleIds) AND status = :status', {
-        staleIds,
-        status: CommandStatus.PENDING,
-      })
+      .where(
+        'deviceId IN (:...staleIds) AND status = :status AND type NOT IN (:...exemptTypes)',
+        { staleIds, status: CommandStatus.PENDING, exemptTypes },
+      )
       .execute();
   }
 
