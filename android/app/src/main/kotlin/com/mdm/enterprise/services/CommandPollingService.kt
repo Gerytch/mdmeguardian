@@ -302,10 +302,16 @@ class CommandPollingService : Service() {
                     "REBOOT" -> policyService.reboot()
 
                     "RENAME_DEVICE" -> {
-                        val name = command.payload["name"] as? String
-                        if (!name.isNullOrBlank()) {
-                            policyService.setDeviceName(name)
-                            Log.i(TAG, "RENAME_DEVICE: device name set to \"$name\"")
+                        // Inner try/catch — command is always EXECUTED regardless of
+                        // payload issues or OS restrictions (name is already correct in backend)
+                        try {
+                            val name = command.payload?.get("name") as? String
+                            if (!name.isNullOrBlank()) {
+                                policyService.setDeviceName(name)
+                                Log.i(TAG, "RENAME_DEVICE: device name set to \"$name\"")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "RENAME_DEVICE: best-effort failed — ${e.message}")
                         }
                     }
 
