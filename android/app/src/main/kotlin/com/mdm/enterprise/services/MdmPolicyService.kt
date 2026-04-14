@@ -118,8 +118,21 @@ class MdmPolicyService(private val context: Context) {
         val pm = context.packageManager
         val launchIntent = android.content.Intent(android.content.Intent.ACTION_MAIN, null)
             .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        val allApps = pm.queryIntentActivities(launchIntent, android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES)
+        val launcherApps = pm.queryIntentActivities(launchIntent, android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES)
             .mapNotNull { it.activityInfo?.packageName }
+            .toSet()
+
+        // System apps that don't show a LAUNCHER entry but must still be hidden in
+        // whitelist kiosk mode (Settings, package installer, etc.)
+        val systemAppsToControl = setOf(
+            "com.android.settings",
+            "com.android.packageinstaller",
+            "com.google.android.packageinstaller",
+            "com.android.permissioncontroller",
+            "com.google.android.permissioncontroller",
+        )
+
+        val allApps = (launcherApps + systemAppsToControl)
             .filter { it != context.packageName }  // MDM agent never hidden
             .toSet()
 

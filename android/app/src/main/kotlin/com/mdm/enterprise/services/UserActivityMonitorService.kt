@@ -66,8 +66,14 @@ class UserActivityMonitorService : Service() {
         Log.i(TAG, "Monitor started. Timeout: ${minutes}min")
 
         serviceScope.launch {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             while (isActive) {
                 delay(15_000L) // check every 15 seconds
+                // If the screen is on the user is actively interacting — reset the idle timer
+                // so the timeout only fires during genuine inactivity (screen off / locked).
+                if (pm.isInteractive) {
+                    lastActivityMs.set(System.currentTimeMillis())
+                }
                 val idle = System.currentTimeMillis() - lastActivityMs.get()
                 if (idle >= timeoutMs) {
                     Log.i(TAG, "Inactivity timeout after ${idle / 1000}s")

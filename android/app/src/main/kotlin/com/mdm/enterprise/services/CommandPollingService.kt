@@ -360,16 +360,21 @@ class CommandPollingService : Service() {
                             .putString("inactivity_timeout_minutes", rules.inactivityTimeoutMinutes.toString())
                             .apply()
 
-                        if (rules.deviceUserAuthRequired && !DeviceLoginActivity.hasActiveSession(applicationContext)) {
-                            DeviceLoginActivity.start(applicationContext)
-                        } else if (!rules.deviceUserAuthRequired) {
-                            // Auth disabled — stop monitor, clear session, dismiss login screen
+                        if (!rules.deviceUserAuthRequired) {
+                            // Auth disabled — stop monitor, clear session, cancel stale notification
                             UserActivityMonitorService.stop(applicationContext)
                             DeviceLoginActivity.clearSession(applicationContext)
                             applicationContext.sendBroadcast(
                                 android.content.Intent("com.mdm.enterprise.DISMISS_LOGIN")
                             )
+                            // Cancel the "Login Necessário" notification in case it was already posted
+                            (applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                                .cancel(4001)
                         }
+                        // When deviceUserAuthRequired is true and there's no active session,
+                        // the watchdog (running every 2s) will call postLoginRequiredAlert() on
+                        // its next tick. Do NOT call DeviceLoginActivity.start() here — doing so
+                        // would race with the watchdog and cause the login screen to flash twice.
 
                         // Install required apps (download APKs not yet installed)
                         val appsJson = gson.toJson(command.payload["requiredApps"])
