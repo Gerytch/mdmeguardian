@@ -541,26 +541,35 @@ class CommandPollingService : Service() {
         val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
         val adminComp = android.content.ComponentName(ctx, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
 
-        // Device Owner path: wake screen + disable keyguard + start activity.
-        // DeviceLoginActivity will call setKeyguardDisabled(false) on onDestroy() when
-        // the user finishes (login success or DISMISS_LOGIN broadcast). No timer needed.
+        // Device Owner path: lock screen first (clears current UI), then after screen goes
+        // off wake directly to login activity — avoids the double-flash where the previous
+        // screen briefly appears before the keyguard dismissal animation.
         if (dpm.isDeviceOwnerApp(ctx.packageName)) {
             try {
                 val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                val wl = pm.newWakeLock(
-                    android.os.PowerManager.FULL_WAKE_LOCK or
-                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                    android.os.PowerManager.ON_AFTER_RELEASE,
-                    "MDM:sessionTimeout"
-                )
-                wl.acquire(5000L)
-                wl.release()
-                dpm.setKeyguardDisabled(adminComp, true)
-                ctx.startActivity(loginIntent)
-                Log.i(TAG, "Session watchdog: keyguard disabled, login activity started")
+                // Step 1: turn screen off cleanly
+                dpm.lockNow()
+                // Step 2: after screen is off (~700ms), wake + disable keyguard + show login
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    try {
+                        val wl = pm.newWakeLock(
+                            android.os.PowerManager.FULL_WAKE_LOCK or
+                            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                            android.os.PowerManager.ON_AFTER_RELEASE,
+                            "MDM:sessionTimeout"
+                        )
+                        wl.acquire(5000L)
+                        wl.release()
+                        dpm.setKeyguardDisabled(adminComp, true)
+                        ctx.startActivity(loginIntent)
+                        Log.i(TAG, "Session watchdog: screen locked then woken to login activity")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Wake-to-login failed: ${e.message}")
+                    }
+                }, 700L)
                 return
             } catch (e: Exception) {
-                Log.w(TAG, "Keyguard-disable approach failed: ${e.message}")
+                Log.w(TAG, "lockNow failed: ${e.message}")
             }
         }
 
