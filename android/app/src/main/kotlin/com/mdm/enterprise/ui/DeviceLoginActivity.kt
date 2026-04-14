@@ -94,10 +94,8 @@ class DeviceLoginActivity : AppCompatActivity() {
             dismissedByPolicy = true
             stopLockTask()
             finish()
-            // Palliative: reboot the device so it comes back cleanly to home screen
-            try {
-                dpm.reboot(adminComponent)
-            } catch (_: Exception) {}
+            // Reboot is triggered by CommandPollingService (outside lock task mode).
+            // This receiver just exits lock task and closes the activity cleanly.
         }
     }
 
@@ -319,7 +317,7 @@ class DeviceLoginActivity : AppCompatActivity() {
             dismissedByPolicy = true
             stopLockTask()
             finish()
-            try { dpm.reboot(adminComponent) } catch (_: Exception) {}
+            // Reboot handled by CommandPollingService on its next tick
             return
         }
     }

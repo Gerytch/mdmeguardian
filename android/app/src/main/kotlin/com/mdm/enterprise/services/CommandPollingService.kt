@@ -389,6 +389,12 @@ class CommandPollingService : Service() {
                             // Cancel the "Login Necessário" notification in case it was already posted
                             (applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                                 .cancel(4001)
+                            // Reboot from Service context (not Activity) — guaranteed outside lock task mode.
+                            // Brief delay lets the broadcast reach the activity first so it can stopLockTask().
+                            delay(1_500L)
+                            try { policyService.reboot() } catch (e: Exception) {
+                                Log.w(TAG, "Reboot after auth-disable failed: ${e.message}")
+                            }
                         }
                         // When deviceUserAuthRequired is true and there's no active session,
                         // the watchdog (running every 2s) will call postLoginRequiredAlert() on
