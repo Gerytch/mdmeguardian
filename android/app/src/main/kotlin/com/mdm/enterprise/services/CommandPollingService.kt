@@ -29,6 +29,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.telephony.TelephonyManager
 import com.mdm.enterprise.api.models.OfflineSessionPayload
 import com.mdm.enterprise.api.models.SyncOfflineRequest
 import com.mdm.enterprise.utils.OfflineSessionStore
@@ -274,7 +275,8 @@ class CommandPollingService : Service() {
             syncPendingOfflineSessions(deviceToken)
         }
 
-        val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME)
+        val (imei1, imei2) = readImeis()
+        val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME, imei1, imei2)
         if (commands.isEmpty()) return
 
         Log.i(TAG, "Fetched ${commands.size} pending command(s)")
@@ -721,6 +723,28 @@ class CommandPollingService : Service() {
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    @Suppress("MissingPermission")
+    private fun readImeis(): Pair<String?, String?> {
+        return try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val component = android.content.ComponentName(this, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                try { dpm.setPermissionGrantState(component, packageName, android.Manifest.permission.READ_PHONE_STATE, android.app.admin.DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED) } catch (_: Exception) {}
+            }
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            val imei1 = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) tm.getImei(0) else @Suppress("DEPRECATION") tm.getDeviceId(0)
+            } catch (_: Exception) { null }
+            val imei2 = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) tm.getImei(1) else @Suppress("DEPRECATION") tm.getDeviceId(1)
+            } catch (_: Exception) { null }
+            Pair(imei1, imei2)
+        } catch (_: Exception) {
+            Pair(null, null)
+        }
     }
 
     private fun refreshNotification() {

@@ -25,6 +25,7 @@ export interface Device {
   name: string
   serialNumber: string
   imei: string | null
+  imei2: string | null
   androidVersion: string | null
   manufacturer: string | null
   model: string | null

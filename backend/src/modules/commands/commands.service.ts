@@ -135,7 +135,7 @@ export class CommandsService {
   }
 
   /** Called by Android agent to fetch pending commands. Marks them as SENT atomically. */
-  async getPendingForDevice(deviceToken: string, agentVersion?: string | null): Promise<Command[]> {
+  async getPendingForDevice(deviceToken: string, agentVersion?: string | null, imei?: string | null, imei2?: string | null): Promise<Command[]> {
     const device = await this.deviceRepository
       .createQueryBuilder('device')
       .addSelect('device.deviceToken')
@@ -154,6 +154,8 @@ export class CommandsService {
     // Update device heartbeat on every poll
     const heartbeat: Record<string, any> = { lastSeenAt: now, isOnline: true };
     if (agentVersion) heartbeat.agentVersion = agentVersion;
+    if (imei)  heartbeat.imei  = imei;
+    if (imei2) heartbeat.imei2 = imei2;
     await this.deviceRepository.update(device.id, heartbeat);
 
     if (pending.length > 0) {

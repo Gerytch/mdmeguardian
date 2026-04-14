@@ -125,9 +125,11 @@ export class CommandsController {
   getPending(
     @Headers('x-device-token') token: string,
     @Headers('x-agent-version') agentVersion: string,
+    @Headers('x-device-imei') imei: string,
+    @Headers('x-device-imei2') imei2: string,
   ): Promise<Command[]> {
     if (!token) throw new UnauthorizedException('X-Device-Token header is required');
-    return this.commandsService.getPendingForDevice(token, agentVersion || null);
+    return this.commandsService.getPendingForDevice(token, agentVersion || null, imei || null, imei2 || null);
   }
 
   /** Android agent syncs installed app list on enrollment. Header: X-Device-Token */

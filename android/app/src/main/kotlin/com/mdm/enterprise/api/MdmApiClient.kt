@@ -28,6 +28,8 @@ interface MdmApi {
     suspend fun getPendingCommands(
         @Header("X-Device-Token") token: String,
         @Header("X-Agent-Version") agentVersion: String,
+        @Header("X-Device-Imei") imei: String?,
+        @Header("X-Device-Imei2") imei2: String?,
     ): List<CommandResponse>
 
     @PATCH("device/commands/{id}/ack")

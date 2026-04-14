@@ -73,7 +73,7 @@ class CommandPollingWorker(
         val tenantId = prefs.getStr("tenant_id") ?: return@withContext Result.failure()
 
         try {
-            val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME)
+            val commands = api.getPendingCommands(deviceToken, com.mdm.enterprise.BuildConfig.VERSION_NAME, null, null)
             Log.i(TAG, "Fetched ${commands.size} pending commands")
 
             for (command in commands) {

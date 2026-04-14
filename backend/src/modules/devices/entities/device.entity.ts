@@ -43,6 +43,9 @@ export class Device {
   imei: string | null;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
+  imei2: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
   androidVersion: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
