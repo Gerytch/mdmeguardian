@@ -85,20 +85,26 @@ class DeviceLoginActivity : AppCompatActivity() {
 
     private lateinit var dpm: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
+    // When true, onDestroy skips setKeyguardDisabled(false) — the policy-dismiss flow
+    // re-enables keyguard AFTER waking the screen, so the home screen shows directly.
+    private var dismissedByPolicy = false
 
     private val dismissReceiver = object : BroadcastReceiver() {
         @Suppress("DEPRECATION")
         override fun onReceive(context: Context?, intent: Intent?) {
+            dismissedByPolicy = true
             stopLockTask()
+            // Capture references before finish() destroys the activity
+            val localDpm = dpm
+            val localAdmin = adminComponent
+            val pm = getSystemService(android.os.PowerManager::class.java)
             finish()
-            // Lock screen first so it goes off cleanly, then wake back up after 1s.
-            // Same approach as postLoginRequiredAlert — avoids the "press power to continue" state.
-            try {
-                dpm.lockNow()
-            } catch (_: Exception) {}
+            // Step 1: lock screen (power off)
+            try { localDpm.lockNow() } catch (_: Exception) {}
+            // Step 2: after 1s wake screen — keyguard is still disabled so home shows directly
+            // Step 3: then re-enable keyguard
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 try {
-                    val pm = getSystemService(android.os.PowerManager::class.java)
                     val wl = pm.newWakeLock(
                         android.os.PowerManager.FULL_WAKE_LOCK or
                         android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
@@ -108,6 +114,8 @@ class DeviceLoginActivity : AppCompatActivity() {
                     wl.acquire(3000L)
                     wl.release()
                 } catch (_: Exception) {}
+                // Re-enable keyguard after wake so it doesn't block the home screen
+                try { localDpm.setKeyguardDisabled(localAdmin, false) } catch (_: Exception) {}
             }, 1000L)
         }
     }
@@ -327,8 +335,26 @@ class DeviceLoginActivity : AppCompatActivity() {
         val prefs = SecurePreferences.getInstance(this)
         val authRequired = prefs.getString("device_user_auth_required", "true")?.toBoolean() ?: true
         if (!authRequired) {
+            dismissedByPolicy = true
             stopLockTask()
+            val localDpm = dpm
+            val localAdmin = adminComponent
+            val pm = getSystemService(android.os.PowerManager::class.java)
             finish()
+            try { localDpm.lockNow() } catch (_: Exception) {}
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val wl = pm.newWakeLock(
+                        android.os.PowerManager.FULL_WAKE_LOCK or
+                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                        android.os.PowerManager.ON_AFTER_RELEASE,
+                        "MDM:authDisabledWake"
+                    )
+                    wl.acquire(3000L)
+                    wl.release()
+                } catch (_: Exception) {}
+                try { localDpm.setKeyguardDisabled(localAdmin, false) } catch (_: Exception) {}
+            }, 1000L)
             return
         }
     }
@@ -346,11 +372,13 @@ class DeviceLoginActivity : AppCompatActivity() {
         try {
             if (dpm.isDeviceOwnerApp(packageName)) {
                 dpm.setLockTaskPackages(adminComponent, emptyArray())
-                // Re-enable keyguard — postLoginRequiredAlert disabled it to show this activity.
-                // Must be called here (not on a timer) so the activity stays visible until
-                // the user successfully logs in or is dismissed via broadcast.
-                dpm.setKeyguardDisabled(adminComponent, false)
-                Log.i(TAG, "onDestroy: keyguard re-enabled")
+                if (!dismissedByPolicy) {
+                    // Re-enable keyguard on normal exit (login success / user logout).
+                    // When dismissed by policy, the dismissReceiver re-enables keyguard
+                    // AFTER waking the screen, so the home screen shows without obstruction.
+                    dpm.setKeyguardDisabled(adminComponent, false)
+                    Log.i(TAG, "onDestroy: keyguard re-enabled")
+                }
             }
         } catch (_: Exception) {}
         super.onDestroy()
