@@ -67,7 +67,11 @@ class UserActivityMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val minutes = intent?.getIntExtra(EXTRA_TIMEOUT_MIN, 5) ?: 5
         timeoutMs = if (minutes <= 0) Long.MAX_VALUE else minutes * 60 * 1000L
-        lastActivityMs.set(System.currentTimeMillis())
+        // Only reset the activity timer on first start — restarting the service (e.g. policy
+        // reapplied) must not reset the countdown while the user is actively using the device.
+        if (monitorJob == null) {
+            lastActivityMs.set(System.currentTimeMillis())
+        }
         Log.i(TAG, "Monitor started. Timeout: ${minutes}min")
 
         ensureAccessibilityServiceEnabled()
