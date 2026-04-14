@@ -93,6 +93,9 @@ class DeviceLoginActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             dismissedByPolicy = true
             stopLockTask()
+            // Clear FLAG_KEEP_SCREEN_ON before lockNow() — otherwise the window holds the screen
+            // on and lockNow() has no effect (same reason postLoginRequiredAlert works: no window)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             val localDpm = dpm
             val localAdmin = adminComponent
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
@@ -333,6 +336,7 @@ class DeviceLoginActivity : AppCompatActivity() {
         if (!authRequired) {
             dismissedByPolicy = true
             stopLockTask()
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             val localDpm = dpm
             val localAdmin = adminComponent
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
