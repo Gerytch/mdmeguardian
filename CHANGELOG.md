@@ -4,6 +4,37 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.0] — 2026-04-13 — APK 2.2.0 (versionCode 40)
+
+### Summary
+Pentest completo da API com correções de segurança (TenantController sem guard, rate limit incorreto, headers HTTP ausentes), correção de 4 bugs encontrados em homologação (timeout de inatividade, tela de login piscando, notificação obsoleta, kiosk whitelist), e feature de renomear dispositivo via painel.
+
+### Added
+- **frontend/devices/[id]/page.tsx**: botão "Renomear" ao lado do nome do device — abre modal, salva nome e despacha `RENAME_DEVICE` automaticamente
+- **scripts/apply-nginx-headers.sh**: script para aplicar security headers no nginx da EC2
+- **backend/common/decorators/roles.decorator.ts**: decorator `@Roles()` para uso com `RolesGuard`
+
+### Changed
+- **backend/tenants/tenant.controller.ts**: todos os endpoints protegidos com `@Roles(SUPER_ADMIN)` — qualquer tenant admin conseguia listar/criar/deletar outros tenants
+- **backend/auth/auth.controller.ts**: throttle de login reduzido de 10 → 5 tentativas/min
+- **backend/device-user-auth/device-user-auth.controller.ts**: chave throttle corrigida de `default` → `global` (device/login não tinha rate limit efetivo)
+- **nginx**: security headers aplicados (`X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy`)
+
+### Fixed
+- **Bug: timeout de inatividade ignorava toques** — `MdmAccessibilityService.onAccessibilityEvent` agora chama `UserActivityMonitorService.recordActivity()` em `TYPE_TOUCH_INTERACTION_START`, `TYPE_VIEW_CLICKED`, `TYPE_VIEW_SCROLLED`, `TYPE_GESTURE_DETECTION_START`; timer só conta inatividade real
+- **Bug: tela de login piscava 2x ao ativar auth** — removida chamada duplicada `DeviceLoginActivity.start()` do handler `UPDATE_POLICY`; watchdog cuida do lançamento em ≤2s sem corrida
+- **Bug: notificação "login necessário" persistia após desativar auth** — `NotificationManager.cancel(4001)` chamado explicitamente quando `deviceUserAuthRequired=false`
+- **Bug: kiosk whitelist mostrava Settings** — `com.android.settings`, `com.android.packageinstaller` e variantes adicionados ao set controlado (não aparecem na query `CATEGORY_LAUNCHER`)
+- **Backend: apps duplicavam ao sincronizar múltiplos devices** — `syncFromDevice` trocado para batch SELECT + `INSERT ... ON CONFLICT DO NOTHING` + UPDATE de name; race condition eliminada
+- **Pentest: GET /api/v1/tenants acessível a TENANT_ADMIN** — guard `SUPER_ADMIN` adicionado ao `TenantController`
+- **Pentest: rate limit device/login ineficaz** — chave throttler corrigida para `global`
+
+### Decisions
+- Touch detection via `MdmAccessibilityService` (já habilitado no enrollment) em vez de `PowerManager.isInteractive()` — mais preciso: reseta apenas em interação real, não em tela ligada
+- Stale "login required" notification cancelada na desativação da policy em vez de depender do broadcast `DISMISS_LOGIN` (que só funciona se a activity estiver em foreground)
+
+---
+
 ## [0.13.0] — 2026-04-13 — APK 2.1.0 (versionCode 39)
 
 ### Summary
