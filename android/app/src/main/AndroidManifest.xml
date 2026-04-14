@@ -127,12 +127,13 @@
             </intent-filter>
         </receiver>
 
-        <!-- Adds launcher shortcut after silent MDM app install -->
+        <!-- Handles PackageInstaller status callbacks and launcher shortcuts after app install -->
         <receiver
             android:name=".services.PackageInstalledReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.mdm.enterprise.SHORTCUT_CONFIRMED" />
+                <action android:name="com.mdm.enterprise.PACKAGE_INSTALLED" />
             </intent-filter>
         </receiver>
 

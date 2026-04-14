@@ -264,7 +264,7 @@ class ApkInstaller(private val context: Context) {
                 }
             }
 
-            val intent = Intent("android.intent.action.MAIN").apply {
+            val intent = Intent(PackageInstalledReceiver.ACTION_INSTALL_STATUS).apply {
                 setPackage(context.packageName)
             }
             val piFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {

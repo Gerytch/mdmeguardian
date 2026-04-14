@@ -290,6 +290,7 @@ class CommandPollingService : Service() {
         cmdWakeLock.acquire(60_000L) // max 60s safety timeout
 
         try {
+        var killForUpdate = false
         for (command in commands) {
             Log.i(TAG, "Executing: ${command.type} (${command.id})")
             var success = true
@@ -451,6 +452,9 @@ class CommandPollingService : Service() {
                             apkInstaller.installMissingApps(listOf(agentApp))
                             result["status"] = "INSTALLING"
                             result["targetVersion"] = version ?: "unknown"
+                            // After ACK, kill process so Android can apply the new APK.
+                            // The app restarts and checkPendingAgentUpdate() reports the result.
+                            killForUpdate = true
                         }
                     }
 
@@ -524,6 +528,12 @@ class CommandPollingService : Service() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to ACK command ${command.id}: ${e.message}")
+            }
+
+            if (killForUpdate) {
+                Log.i(TAG, "UPDATE_AGENT: killing process so Android can apply the new APK")
+                delay(1_500L) // brief pause to ensure ACK reaches backend
+                android.os.Process.killProcess(android.os.Process.myPid())
             }
         }
         } finally {

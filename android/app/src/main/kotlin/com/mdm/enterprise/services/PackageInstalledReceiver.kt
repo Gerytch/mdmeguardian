@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.AdaptiveIconDrawable
@@ -22,9 +23,29 @@ import java.util.LinkedList
 class PackageInstalledReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_SHORTCUT_CONFIRMED) {
-            Log.i(TAG, "Shortcut confirmed — advancing queue")
-            onShortcutConfirmed()
+        when (intent.action) {
+            ACTION_SHORTCUT_CONFIRMED -> {
+                Log.i(TAG, "Shortcut confirmed — advancing queue")
+                onShortcutConfirmed()
+            }
+            ACTION_INSTALL_STATUS -> {
+                val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)
+                val pkg = intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME) ?: "?"
+                when (status) {
+                    PackageInstaller.STATUS_SUCCESS ->
+                        Log.i(TAG, "Silent install SUCCESS for $pkg")
+                    PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                        // Device Owner unavailable or older Android — show system install dialog
+                        val confirmIntent = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                        if (confirmIntent != null) {
+                            confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(confirmIntent)
+                            Log.i(TAG, "Install confirmation dialog started for $pkg")
+                        }
+                    }
+                    else -> Log.w(TAG, "Install status $status for $pkg: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
+                }
+            }
         }
     }
 
@@ -33,6 +54,7 @@ class PackageInstalledReceiver : BroadcastReceiver() {
         private const val PREFS_NAME = "mdm_pending_shortcuts"
         private const val KEY_PACKAGES = "packages"
         const val ACTION_SHORTCUT_CONFIRMED = "com.mdm.enterprise.SHORTCUT_CONFIRMED"
+        const val ACTION_INSTALL_STATUS = "com.mdm.enterprise.PACKAGE_INSTALLED"
 
         private val handler = Handler(Looper.getMainLooper())
         private val queue = LinkedList<String>()
