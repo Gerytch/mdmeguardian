@@ -9,11 +9,16 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { TenantService, CreateTenantDto, UpdateTenantDto } from './tenant.service';
 import { Tenant } from './entities/tenant.entity';
+import { RolesGuard, Role } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('tenants')
+@UseGuards(RolesGuard)
+@Roles(Role.SUPER_ADMIN)
 export class TenantController {
   constructor(private readonly tenantService: TenantService) {}
 

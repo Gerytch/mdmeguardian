@@ -25,7 +25,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ global: { ttl: 60000, limit: 10 } })
+  @Throttle({ global: { ttl: 60000, limit: 5 } })
   login(
     @Body() dto: LoginDto,
     @Headers('x-tenant-id') tenantId: string,
