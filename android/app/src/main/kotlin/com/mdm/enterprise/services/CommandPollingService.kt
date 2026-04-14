@@ -308,6 +308,9 @@ class CommandPollingService : Service() {
                             val name = command.payload?.get("name") as? String
                             if (!name.isNullOrBlank()) {
                                 policyService.setDeviceName(name)
+                                // Persist MDM name locally and refresh the persistent notification
+                                prefs.edit().putString("device_name", name).apply()
+                                refreshNotification()
                                 Log.i(TAG, "RENAME_DEVICE: device name set to \"$name\"")
                             }
                         } catch (e: Exception) {
@@ -705,15 +708,25 @@ class CommandPollingService : Service() {
         }
     }
 
-    private fun buildNotification() =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification(): android.app.Notification {
+        val version    = com.mdm.enterprise.BuildConfig.VERSION_NAME
+        val deviceName = prefs.getString("device_name", null)
+        val text = if (!deviceName.isNullOrBlank()) "$deviceName · v$version"
+                   else "v$version · Dispositivo gerenciado"
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("E.Guardian Ativo")
-            .setContentText("Dispositivo gerenciado e monitorado")
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    private fun refreshNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID, buildNotification())
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
