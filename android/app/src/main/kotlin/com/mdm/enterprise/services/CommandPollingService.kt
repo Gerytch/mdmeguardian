@@ -200,11 +200,11 @@ class CommandPollingService : Service() {
         }
 
         // Watchdog: if device-user auth is required and no active session exists,
-        // post full-screen notification and lock the screen ONCE. Subsequent ticks
-        // only refresh the notification so it stays visible — repeated lockNow() calls
-        // would cause an infinite black-screen loop before DeviceLoginActivity can appear.
+        // launch DeviceLoginActivity. Uses a 5s cooldown to avoid spamming startActivity
+        // while the previous launch is still animating in. No notification is posted —
+        // the lock-task activity IS the UI. Notification 4001 is cancelled if stale.
         launch {
-            var lockFired = false
+            var lastTriggerMs = 0L
             while (isActive) {
                 delay(2_000L)
                 val authRequired = prefs.getString("device_user_auth_required", "false") == "true"
@@ -228,14 +228,18 @@ class CommandPollingService : Service() {
                         OfflineSessionStore.clearPreAdminState(applicationContext)
                     }
                 }
-                if (authRequired && !hasSession && !com.mdm.enterprise.ui.DeviceLoginActivity.isInForeground) {
-                    Log.i(TAG, "Session watchdog: no active session, triggering login (lockFired=$lockFired)")
-                    postLoginRequiredAlert(applicationContext, lockNow = !lockFired)
-                    lockFired = true
-                } else {
-                    // Session restored or activity visible — reset so next timeout fires lockNow again
-                    if (lockFired) Log.i(TAG, "Session watchdog: session restored, resetting lockFired")
-                    lockFired = false
+                val loginInForeground = com.mdm.enterprise.ui.DeviceLoginActivity.isInForeground
+                if (authRequired && !hasSession && !loginInForeground) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTriggerMs > 5_000L) {
+                        Log.i(TAG, "Session watchdog: no active session, triggering login")
+                        postLoginRequiredAlert(applicationContext)
+                        lastTriggerMs = now
+                    }
+                } else if (hasSession || loginInForeground) {
+                    // Cancel any stale notification left from a previous session expiry
+                    val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(4001)
                 }
             }
         }
@@ -512,7 +516,7 @@ class CommandPollingService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun postLoginRequiredAlert(ctx: Context, lockNow: Boolean = true) {
+    private fun postLoginRequiredAlert(ctx: Context) {
         val loginIntent = Intent(ctx, com.mdm.enterprise.ui.DeviceLoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(com.mdm.enterprise.ui.DeviceLoginActivity.EXTRA_REASON, "Sessão encerrada por inatividade")
@@ -520,82 +524,61 @@ class CommandPollingService : Service() {
 
         val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
         val adminComp = android.content.ComponentName(ctx, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
-        val isOwner = dpm.isDeviceOwnerApp(ctx.packageName)
 
-        if (lockNow) {
-            // First trigger: wake screen + disable keyguard + start activity.
-            // Device Owner privilege allows this on all API levels — no reliance on
-            // USE_FULL_SCREEN_INTENT (restricted on Android 14+).
-            if (isOwner) {
-                try {
-                    // Wake screen (same as unlockDevice())
-                    val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                    val wl = pm.newWakeLock(
-                        android.os.PowerManager.FULL_WAKE_LOCK or
-                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                        android.os.PowerManager.ON_AFTER_RELEASE,
-                        "MDM:sessionTimeout"
-                    )
-                    wl.acquire(5000L)
-                    wl.release()
-
-                    dpm.setKeyguardDisabled(adminComp, true)
-                    ctx.startActivity(loginIntent)
-                    Log.i(TAG, "Session timeout: keyguard disabled, login activity started")
-
-                    // Re-enable keyguard after activity has time to appear
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        try {
-                            dpm.setKeyguardDisabled(adminComp, false)
-                            Log.i(TAG, "Session timeout: keyguard re-enabled")
-                        } catch (_: Exception) {}
-                    }, 3000L)
-                    return
-                } catch (e: Exception) {
-                    Log.w(TAG, "Keyguard-disable approach failed: ${e.message}")
-                }
-            }
-
-            // Fallback (non-Device-Owner or exception): lockNow + full-screen notification
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                ctx.startActivity(loginIntent)
-                return
-            }
+        // Device Owner path: wake screen + disable keyguard + start activity.
+        // DeviceLoginActivity will call setKeyguardDisabled(false) on onDestroy() when
+        // the user finishes (login success or DISMISS_LOGIN broadcast). No timer needed.
+        if (dpm.isDeviceOwnerApp(ctx.packageName)) {
             try {
-                if (dpm.isAdminActive(adminComp)) dpm.lockNow()
-                Log.i(TAG, "lockNow fired for session timeout (fallback)")
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                val wl = pm.newWakeLock(
+                    android.os.PowerManager.FULL_WAKE_LOCK or
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+                    "MDM:sessionTimeout"
+                )
+                wl.acquire(5000L)
+                wl.release()
+                dpm.setKeyguardDisabled(adminComp, true)
+                ctx.startActivity(loginIntent)
+                Log.i(TAG, "Session watchdog: keyguard disabled, login activity started")
+                return
             } catch (e: Exception) {
-                Log.w(TAG, "lockNow for session timeout failed: ${e.message}")
+                Log.w(TAG, "Keyguard-disable approach failed: ${e.message}")
             }
         }
 
-        // Post/refresh ONGOING notification so user can tap to open login screen
-        // (both on first trigger for non-owner fallback and on subsequent watchdog ticks)
+        // Fallback for non-Device-Owner: direct start (API < Q) or lockNow + notification
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            ctx.startActivity(loginIntent)
+            return
+        }
+        try {
+            if (dpm.isAdminActive(adminComp)) dpm.lockNow()
+        } catch (e: Exception) {
+            Log.w(TAG, "lockNow fallback failed: ${e.message}")
+        }
+        // Post notification as fallback UI for non-owner devices
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "mdm_session_timeout"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             nm.getNotificationChannel(channelId) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(channelId, "Sessão Expirada", NotificationManager.IMPORTANCE_HIGH).apply {
-                    setShowBadge(false)
-                    enableLights(false)
-                    enableVibration(false)
+                    setShowBadge(false); enableLights(false); enableVibration(false)
                 }
             )
         }
         val pi = PendingIntent.getActivity(ctx, 4001, loginIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(ctx, channelId)
+        nm.notify(4001, NotificationCompat.Builder(ctx, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle("Login Necessário")
             .setContentText("Sua sessão expirou. Faça login para continuar.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setFullScreenIntent(pi, true)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .build()
-        nm.notify(4001, notification)
+            .setOngoing(true).setAutoCancel(false).build())
     }
 
     private fun postAdminLockAlert(ctx: Context, forceStart: Boolean = true) {

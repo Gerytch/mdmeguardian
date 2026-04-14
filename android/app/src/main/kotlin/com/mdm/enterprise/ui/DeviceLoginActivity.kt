@@ -327,6 +327,11 @@ class DeviceLoginActivity : AppCompatActivity() {
         try {
             if (dpm.isDeviceOwnerApp(packageName)) {
                 dpm.setLockTaskPackages(adminComponent, emptyArray())
+                // Re-enable keyguard — postLoginRequiredAlert disabled it to show this activity.
+                // Must be called here (not on a timer) so the activity stays visible until
+                // the user successfully logs in or is dismissed via broadcast.
+                dpm.setKeyguardDisabled(adminComponent, false)
+                Log.i(TAG, "onDestroy: keyguard re-enabled")
             }
         } catch (_: Exception) {}
         super.onDestroy()
