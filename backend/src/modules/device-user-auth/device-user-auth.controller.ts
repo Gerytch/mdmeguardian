@@ -49,7 +49,7 @@ export class DeviceUserAuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.CREATED)
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ global: { ttl: 60000, limit: 5 } })
   login(
     @Headers('x-device-token') deviceToken: string,
     @Body() dto: LoginDto,
