@@ -87,21 +87,28 @@ class DeviceLoginActivity : AppCompatActivity() {
     private lateinit var adminComponent: ComponentName
 
     private val dismissReceiver = object : BroadcastReceiver() {
+        @Suppress("DEPRECATION")
         override fun onReceive(context: Context?, intent: Intent?) {
             stopLockTask()
-            // Dismiss keyguard before finish() so the system doesn't show the lock screen
-            // after setKeyguardDisabled(false) is called in onDestroy(). Same fix as ADMIN_UNLOCK.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val km = getSystemService(android.app.KeyguardManager::class.java)
-                km?.requestDismissKeyguard(this@DeviceLoginActivity, null)
-            } else {
-                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_HOME)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(homeIntent)
-            }
             finish()
+            // Lock screen first so it goes off cleanly, then wake back up after 1s.
+            // Same approach as postLoginRequiredAlert — avoids the "press power to continue" state.
+            try {
+                dpm.lockNow()
+            } catch (_: Exception) {}
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val pm = getSystemService(android.os.PowerManager::class.java)
+                    val wl = pm.newWakeLock(
+                        android.os.PowerManager.FULL_WAKE_LOCK or
+                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                        android.os.PowerManager.ON_AFTER_RELEASE,
+                        "MDM:authDisabledWake"
+                    )
+                    wl.acquire(3000L)
+                    wl.release()
+                } catch (_: Exception) {}
+            }, 1000L)
         }
     }
 
