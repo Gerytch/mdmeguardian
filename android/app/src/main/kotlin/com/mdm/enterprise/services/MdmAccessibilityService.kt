@@ -44,7 +44,17 @@ class MdmAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Accessibility service connected")
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent) { /* unused */ }
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        // Any touch or gesture interaction resets the inactivity timer
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_TOUCH_INTERACTION_START,
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_SCROLLED,
+            AccessibilityEvent.TYPE_GESTURE_DETECTION_START -> {
+                UserActivityMonitorService.recordActivity()
+            }
+        }
+    }
 
     override fun onInterrupt() { /* unused */ }
 
