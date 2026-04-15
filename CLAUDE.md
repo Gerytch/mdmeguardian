@@ -205,6 +205,7 @@ O E.Guardian precisa ser Device Owner para:
 | Velocidade de download não medida no teste de rede | `NetworkTestExecutor` só coletava dados Wi-Fi (SSID, RSSI, redes próximas) | Adicionado `measureDownloadSpeedMbps()`: busca token do fast.com no JS, chama API, faz download por 8s e calcula Mbps; frontend exibe card verde "X.X Mbps / Medido via fast.com" |
 | Timeout de inatividade não disparava com tela ligada | `UserActivityMonitorService` chamava `recordActivity()` a cada 15s quando `pm.isInteractive == true`, anulando a detecção real de toque | Removido bloco `if (pm.isInteractive) { recordActivity() }` — timer só reseta via `dispatchTouchEvent` (lock task) e `MdmAccessibilityService` (sessão ativa) |
 | Timeout disparava ao navegar fora do E.Guardian (Android 14+) | `MdmAccessibilityService` não consegue se auto-habilitar em Android 14+ (Device Owner bloqueado de modificar `enabled_accessibility_services`); sem o serviço, toques externos não chegavam ao `recordActivity()` | Fallback `isInteractive` reintroduzido condicionalmente: `if (!MdmAccessibilityService.isRunning && pm.isInteractive)` — só ativo quando o serviço de acessibilidade está indisponível |
+| Política ignorada após logout do usuário admin T.I | Watchdog restaurava apenas kiosk e adminLock do `preAdminState`; `PolicyRules` completo (camera, USB, screenshot, etc.) nunca era re-aplicado após bypass admin | `UPDATE_POLICY` persiste `last_policy_rules_json` em prefs; watchdog re-aplica `policyService.applyPolicy(rules)` antes de restaurar kiosk/adminLock |
 
 ---
 

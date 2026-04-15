@@ -215,6 +215,19 @@ class CommandPollingService : Service() {
                     val preAdminState = OfflineSessionStore.getPreAdminState(applicationContext)
                     if (preAdminState != null) {
                         Log.i(TAG, "Session watchdog: restoring pre-admin state (locked=${preAdminState.wasAdminLocked} kiosk=${preAdminState.wasKioskActive})")
+                        // Re-apply full policy first so all restrictions (camera, USB, etc.) are restored
+                        val savedRulesJson = prefs.getStr("last_policy_rules_json")
+                        if (savedRulesJson != null) {
+                            try {
+                                val rules = Gson().fromJson(savedRulesJson, PolicyRules::class.java)
+                                if (rules != null) {
+                                    policyService.applyPolicy(rules)
+                                    Log.i(TAG, "Session watchdog: full policy re-applied after admin bypass")
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Session watchdog: failed to re-apply policy: ${e.message}")
+                            }
+                        }
                         if (preAdminState.wasAdminLocked) {
                             policyService.adminLock(
                                 preAdminState.adminLockMessage,
@@ -377,6 +390,7 @@ class CommandPollingService : Service() {
                         prefs.edit()
                             .putString("device_user_auth_required", rules.deviceUserAuthRequired.toString())
                             .putString("inactivity_timeout_minutes", rules.inactivityTimeoutMinutes.toString())
+                            .putString("last_policy_rules_json", rulesJson) // persisted for restore after admin bypass
                             .apply()
 
                         if (!rules.deviceUserAuthRequired) {

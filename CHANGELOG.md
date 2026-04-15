@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.5] — 2026-04-15 — APK 2.7.3 (versionCode 66)
+
+### Summary
+Corrigido bug no fluxo de bypass admin (T.I): ao deslogar o usuário admin e logar novamente com usuário operacional, o device ficava com todas as restrições da política desabilitadas. O watchdog restaurava apenas kiosk e adminLock mas não re-aplicava a política completa (camera, USB, screenshot, etc.).
+
+### Fixed
+- **`CommandPollingService.kt`** — `UPDATE_POLICY` agora persiste o JSON completo das rules em `last_policy_rules_json` (SecurePreferences)
+- **`CommandPollingService.kt`** — watchdog de sessão: ao restaurar `preAdminState`, re-aplica primeiro a política completa via `policyService.applyPolicy(rules)` antes de restaurar kiosk/adminLock
+
+### Decisions
+- A re-aplicação da política completa precede a restauração de kiosk/adminLock para garantir que o estado final é coerente com as regras do servidor
+- `last_policy_rules_json` persiste entre sessões — sempre sobrescrito a cada UPDATE_POLICY recebido
+
+---
+
 ## [0.14.4] — 2026-04-15 — APK 2.7.2 (versionCode 65)
 
 ### Summary
