@@ -79,12 +79,18 @@ class UserActivityMonitorService : Service() {
         // Cancel any previous monitor loop before starting a new one
         monitorJob?.cancel()
         monitorJob = serviceScope.launch {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             while (isActive) {
                 delay(15_000L) // check every 15 seconds
-                // Touch activity is tracked via MdmAccessibilityService and
-                // DeviceLoginActivity.dispatchTouchEvent → recordActivity().
-                // Do NOT reset the timer based on screen state — that would defeat
-                // the inactivity timeout (timeout = no touch, not screen off).
+                // Primary: MdmAccessibilityService and DeviceLoginActivity.dispatchTouchEvent
+                // call recordActivity() on every touch.
+                // Fallback: on Android 14+ the OS blocks Device Owner from enabling the
+                // accessibility service programmatically (setSecureSetting denied). If the
+                // service is not running, fall back to isInteractive so the user is never
+                // timed out while the screen is actively on.
+                if (!MdmAccessibilityService.isRunning && pm.isInteractive) {
+                    recordActivity()
+                }
                 val idle = System.currentTimeMillis() - lastActivityMs.get()
                 if (idle >= timeoutMs) {
                     Log.i(TAG, "Inactivity timeout after ${idle / 1000}s")

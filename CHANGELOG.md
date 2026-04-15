@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.4] — 2026-04-15 — APK 2.7.2 (versionCode 65)
+
+### Summary
+Timeout de inatividade disparava ao navegar em menus/configurações fora do E.Guardian em Android 14+. O `MdmAccessibilityService` não conseguia se auto-habilitar por restrição do SO (Device Owner bloqueado de modificar `enabled_accessibility_services`). Sem o serviço ativo, toques fora do app não chegavam ao `recordActivity()`. Fix: fallback `isInteractive` reintroduzido condicionalmente — só ativo quando o serviço de acessibilidade NÃO está rodando.
+
+### Fixed
+- **`UserActivityMonitorService.kt`**: fallback `if (!MdmAccessibilityService.isRunning && pm.isInteractive) { recordActivity() }` — garante que o timer não dispara enquanto a tela está acesa **quando** o serviço de acessibilidade está indisponível (Android 14+ com restrição de Device Owner)
+
+### Decisions
+- Quando `MdmAccessibilityService.isRunning == true`: detecção real por toque (comportamento correto)
+- Quando `MdmAccessibilityService.isRunning == false` (Android 14+ bloqueado): fallback para `isInteractive` evita timeouts falsos durante uso ativo do device
+
+---
+
 ## [0.14.3] — 2026-04-15 — APK 2.7.0 (versionCode 63)
 
 ### Summary
