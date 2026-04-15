@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.3] — 2026-04-15 — APK 2.7.0 (versionCode 63)
+
+### Summary
+Corrigido bug crítico no timeout de inatividade do device-user: o timer era resetado a cada 15s enquanto a tela estava ligada (`pm.isInteractive`), fazendo o timeout se comportar como "tempo que a tela fica acesa" em vez de "tempo sem toque". Validado via QA automatizado no emulador API36.
+
+### Fixed
+- **`UserActivityMonitorService.kt`**: removido bloco `if (pm.isInteractive) { recordActivity() }` do loop de monitoramento. O fallback de `isInteractive` anulava o mecanismo real de detecção de toque (`DeviceLoginActivity.dispatchTouchEvent` + `MdmAccessibilityService`), impedindo que o timeout disparasse com a tela acesa.
+
+### Validated
+- **Teste A — Inatividade real**: sessão expirou em 60s sem toque, DeviceLoginActivity reapresentada ✅
+- **Teste B — Toque reseta timer**: 4 toques ao longo de 2min, sem nenhum timeout ✅
+
+### Decisions
+- A detecção de toque via `dispatchTouchEvent` (lock task mode) e `MdmAccessibilityService` (sessão ativa) é suficiente — o fallback `isInteractive` era redundante e incorreto para o caso de uso
+- Não há impacto em backend ou frontend — mudança isolada no Android
+
+---
+
 ## [0.14.2] — 2026-04-14 — APK 2.4.0 (versionCode 42)
 
 ### Summary

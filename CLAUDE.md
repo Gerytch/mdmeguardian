@@ -203,6 +203,7 @@ O E.Guardian precisa ser Device Owner para:
 | Após `ADMIN_UNLOCK` o keyguard aparecia e exigia interação | `finish()` da `AdminLockActivity` devolvia foco ao keyguard do Android | `unlockReceiver.onReceive` chama `requestDismissKeyguard()` (API 26+) ou `ACTION_HOME` (API 25) antes de `finish()` |
 | Comandos não chegavam após reboot sem unlock | `BOOT_COMPLETED` só dispara após primeiro unlock; service não iniciava antes | Direct Boot: `BootPrefs` (device-protected storage) espelha credenciais no enrollment; `LOCKED_BOOT_COMPLETED` inicia o service antes do unlock; `CommandPollingService` + `MdmApiClient` fazem fallback para `BootPrefs` quando `SecurePreferences` indisponível |
 | Velocidade de download não medida no teste de rede | `NetworkTestExecutor` só coletava dados Wi-Fi (SSID, RSSI, redes próximas) | Adicionado `measureDownloadSpeedMbps()`: busca token do fast.com no JS, chama API, faz download por 8s e calcula Mbps; frontend exibe card verde "X.X Mbps / Medido via fast.com" |
+| Timeout de inatividade não disparava com tela ligada | `UserActivityMonitorService` chamava `recordActivity()` a cada 15s quando `pm.isInteractive == true`, anulando a detecção real de toque | Removido bloco `if (pm.isInteractive) { recordActivity() }` — timer só reseta via `dispatchTouchEvent` (lock task) e `MdmAccessibilityService` (sessão ativa) |
 
 ---
 
