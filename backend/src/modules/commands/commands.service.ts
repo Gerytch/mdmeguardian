@@ -3,14 +3,17 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { Command, CommandStatus, CommandType } from './entities/command.entity';
 import { Device } from '../devices/entities/device.entity';
 import { Policy } from '../policies/entities/policy.entity';
 import { App } from '../apps/entities/app.entity';
+import { User } from '../users/entities/user.entity';
 import { DeviceSession, DeviceSessionStatus } from '../device-sessions/entities/device-session.entity';
 
 export interface CreateCommandDto {
@@ -57,6 +60,8 @@ export class CommandsService {
     private readonly policyRepository: Repository<Policy>,
     @InjectRepository(App)
     private readonly appRepository: Repository<App>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     @InjectRepository(DeviceSession)
     private readonly deviceSessionRepository: Repository<DeviceSession>,
   ) {}
@@ -67,8 +72,23 @@ export class CommandsService {
     });
     if (!device) throw new NotFoundException(`Device "${dto.deviceId}" not found`);
 
-    if (dto.type === CommandType.WIPE && !dto.payload?.confirmed) {
-      throw new BadRequestException('WIPE command requires payload.confirmed = true');
+    if (dto.type === CommandType.WIPE) {
+      if (!dto.payload?.confirmed) {
+        throw new BadRequestException('WIPE command requires payload.confirmed = true');
+      }
+      if (!dto.payload?.adminPassword) {
+        throw new BadRequestException('WIPE command requires admin password confirmation');
+      }
+      const admin = await this.userRepository
+        .createQueryBuilder('user')
+        .addSelect('user.passwordHash')
+        .where('user.id = :id', { id: dto.createdBy })
+        .getOne();
+      if (!admin) throw new UnauthorizedException('Admin user not found');
+      const valid = await bcrypt.compare(dto.payload.adminPassword, admin.passwordHash);
+      if (!valid) throw new UnauthorizedException('Senha incorreta');
+      // Strip password from saved payload
+      delete dto.payload.adminPassword;
     }
 
     // If UPDATE_POLICY arrives without a payload, auto-populate from the

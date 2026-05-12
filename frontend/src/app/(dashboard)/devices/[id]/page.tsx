@@ -71,6 +71,12 @@ export default function DeviceDetailPage() {
   const [agentApkUrl, setAgentApkUrl]         = useState('')
   const [agentVersion, setAgentVersion]       = useState('')
 
+  // Wipe device modal state
+  const [showWipe, setShowWipe]       = useState(false)
+  const [wipePassword, setWipePassword] = useState('')
+  const [wipeSending, setWipeSending] = useState(false)
+  const [wipeError, setWipeError]     = useState('')
+
   // Rename device modal state
   const [showRename, setShowRename]   = useState(false)
   const [renameValue, setRenameValue] = useState('')
@@ -671,6 +677,15 @@ export default function DeviceDetailPage() {
                   <span>⬆️ Atualizar Agente</span>
                   <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
+                {/* Limpar Dispositivo (Wipe) — requer senha admin */}
+                <button
+                  onClick={() => { setShowWipe(true); setWipePassword(''); setWipeError('') }}
+                  disabled={!!sending}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                >
+                  <span>🗑️ Limpar Dispositivo (Wipe)</span>
+                  <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
               </div>
             </div>
 
@@ -1078,6 +1093,73 @@ export default function DeviceDetailPage() {
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
               >
                 {sending === 'UPDATE_AGENT' ? 'Enviando...' : 'Enviar Atualização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Wipe Device Modal ── */}
+      {showWipe && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-red-700">🗑️ Limpar Dispositivo (Wipe)</h3>
+              <p className="text-sm text-gray-500 mt-0.5">Esta ação é <strong>irreversível</strong>. Todos os dados do dispositivo serão apagados e ele voltará ao estado de fábrica.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-700 font-medium">Dispositivo: {device?.name}</p>
+                <p className="text-xs text-red-500 mt-1">Modelo: {device?.manufacturer} {device?.model}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Senha do administrador</label>
+                <input
+                  type="password"
+                  value={wipePassword}
+                  onChange={e => { setWipePassword(e.target.value); setWipeError('') }}
+                  placeholder="Digite sua senha para confirmar"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  autoFocus
+                />
+                {wipeError && <p className="text-xs text-red-600 mt-1">{wipeError}</p>}
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setShowWipe(false)}
+                disabled={wipeSending}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >Cancelar</button>
+              <button
+                onClick={async () => {
+                  if (!wipePassword.trim()) { setWipeError('Digite sua senha'); return }
+                  setWipeSending(true)
+                  setWipeError('')
+                  try {
+                    await devicesApi.sendCommand(tenantId, device!.id, 'WIPE', {
+                      confirmed: true,
+                      adminPassword: wipePassword,
+                    })
+                    setShowWipe(false)
+                    setMsg({ type: 'success', text: 'Comando WIPE enviado — o dispositivo será restaurado para padrão de fábrica' })
+                    setTimeout(load, 800)
+                  } catch (err: any) {
+                    const m = err.response?.data?.message
+                    const errMsg = Array.isArray(m) ? m.join(', ') : m || 'Falha ao enviar comando'
+                    if (errMsg.includes('Senha incorreta') || errMsg.includes('password')) {
+                      setWipeError('Senha incorreta')
+                    } else {
+                      setWipeError(errMsg)
+                    }
+                  } finally {
+                    setWipeSending(false)
+                  }
+                }}
+                disabled={wipeSending || !wipePassword.trim()}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {wipeSending ? 'Verificando...' : 'Confirmar Wipe'}
               </button>
             </div>
           </div>

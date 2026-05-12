@@ -23,6 +23,7 @@ export interface PolicyRules {
   screenshotBlocked: boolean;
   cameraBlocked: boolean;
   usbBlocked: boolean;
+  factoryResetBlocked: boolean;
   screenTimeoutSeconds?: number;
   deviceUserAuthRequired?: boolean;
   inactivityTimeoutMinutes?: number;
@@ -39,6 +40,7 @@ const DEFAULT_RULES: PolicyRules = {
   screenshotBlocked: false,
   cameraBlocked: false,
   usbBlocked: false,
+  factoryResetBlocked: true,
   screenTimeoutSeconds: 60,
   deviceUserAuthRequired: false,
   inactivityTimeoutMinutes: 5,

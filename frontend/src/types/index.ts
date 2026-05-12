@@ -68,6 +68,7 @@ export interface PolicyRules {
   screenshotBlocked: boolean
   cameraBlocked: boolean
   usbBlocked: boolean
+  factoryResetBlocked: boolean
   deviceUserAuthRequired?: boolean
   inactivityTimeoutMinutes?: number
 }

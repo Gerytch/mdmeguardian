@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.UserManager
 import android.util.Log
 import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.models.PolicyRules
@@ -80,6 +81,7 @@ class MdmPolicyService(private val context: Context) {
         blockScreenCapture(rules.screenshotBlocked)
 
         if (isDeviceOwner) {
+            blockFactoryReset(rules.factoryResetBlocked)
             if (rules.kioskMode) {
                 enableKioskMode(rules.kioskApps, rules.kioskModeType)
             } else {
@@ -313,6 +315,22 @@ class MdmPolicyService(private val context: Context) {
             Log.i(TAG, "USB data transfer blocked: $block")
         } catch (e: Exception) {
             Log.w(TAG, "USB blocking not supported on this device", e)
+        }
+    }
+
+    fun blockFactoryReset(block: Boolean) {
+        if (!isDeviceOwner) return
+        try {
+            if (block) {
+                dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
+                dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
+            } else {
+                dpm.clearUserRestriction(adminComponent, UserManager.DISALLOW_FACTORY_RESET)
+                dpm.clearUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
+            }
+            Log.i(TAG, "Factory reset blocked: $block")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set factory reset restriction", e)
         }
     }
 

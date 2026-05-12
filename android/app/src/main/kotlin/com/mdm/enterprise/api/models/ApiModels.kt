@@ -130,6 +130,7 @@ data class PolicyRules(
     val screenshotBlocked: Boolean = false,
     val cameraBlocked: Boolean = false,
     val usbBlocked: Boolean = false,
+    val factoryResetBlocked: Boolean = true,
     val screenTimeoutSeconds: Int = 300,
     val deviceUserAuthRequired: Boolean = false,
     val inactivityTimeoutMinutes: Int = 5,

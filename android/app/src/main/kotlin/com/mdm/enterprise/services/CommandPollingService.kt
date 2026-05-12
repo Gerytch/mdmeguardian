@@ -103,6 +103,12 @@ class CommandPollingService : Service() {
             postAdminLockAlert(applicationContext, forceStart = true)
         }
 
+        // Block factory reset immediately on service start (before first policy arrives)
+        val policyService = MdmPolicyService(applicationContext)
+        if (policyService.isDeviceOwner) {
+            policyService.blockFactoryReset(true)
+        }
+
         // Check if a self-update was in progress — report result to backend
         checkPendingAgentUpdate()
 

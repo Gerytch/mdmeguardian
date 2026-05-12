@@ -51,7 +51,7 @@ export class DeviceUserAuthService {
         fullName: operationalUser.fullName,
         jobTitle: operationalUser.jobTitle,
         photoUrl: operationalUser.photoUrl,
-        sessionType: 'operational',
+        sessionType: operationalUser.isDeviceAdmin ? 'admin' : 'operational',
       }
     }
 

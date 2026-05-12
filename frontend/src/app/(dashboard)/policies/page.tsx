@@ -152,6 +152,7 @@ const DEFAULT_RULES: PolicyRules = {
   cameraBlocked: false,
   usbBlocked: false,
   screenshotBlocked: false,
+  factoryResetBlocked: true,
   wifiOnly: false,
   locationTracking: false,
   trackingIntervalMinutes: 5,
@@ -341,6 +342,7 @@ export default function PoliciesPage() {
       cameraBlocked: p.rules.cameraBlocked,
       usbBlocked: p.rules.usbBlocked,
       screenshotBlocked: p.rules.screenshotBlocked,
+      factoryResetBlocked: p.rules.factoryResetBlocked ?? true,
       wifiOnly: p.rules.wifiOnly,
       locationTracking: p.rules.locationTracking,
       trackingIntervalMinutes: p.rules.trackingIntervalMinutes,
@@ -368,6 +370,7 @@ export default function PoliciesPage() {
     cameraBlocked: form.cameraBlocked,
     usbBlocked: form.usbBlocked,
     screenshotBlocked: form.screenshotBlocked,
+    factoryResetBlocked: form.factoryResetBlocked,
     wifiOnly: form.wifiOnly,
     locationTracking: form.locationTracking,
     trackingIntervalMinutes: form.trackingIntervalMinutes,
@@ -543,6 +546,7 @@ export default function PoliciesPage() {
     ['Camera', rules.cameraBlocked],
     ['USB', rules.usbBlocked],
     ['Screenshots', rules.screenshotBlocked],
+    ['Factory Reset', rules.factoryResetBlocked],
     ['Wi-Fi Only', rules.wifiOnly],
     ['Location', rules.locationTracking],
     ['Kiosk', rules.kioskMode],
@@ -705,6 +709,7 @@ export default function PoliciesPage() {
                 <Toggle label="Bloquear Câmera" hint="Impede o uso da câmera do dispositivo" checked={form.cameraBlocked} onChange={v => set('cameraBlocked', v)} />
                 <Toggle label="Bloquear Transferência USB" hint="Desativa o acesso a dados via USB" checked={form.usbBlocked} onChange={v => set('usbBlocked', v)} />
                 <Toggle label="Bloquear Capturas de Tela" hint="Impede capturas de tela" checked={form.screenshotBlocked} onChange={v => set('screenshotBlocked', v)} />
+                <Toggle label="Bloquear Restauração de Fábrica" hint="Impede o usuário de restaurar o dispositivo para padrão de fábrica" checked={form.factoryResetBlocked} onChange={v => set('factoryResetBlocked', v)} />
                 <Toggle label="Somente Wi-Fi" hint="Desativa dados móveis" checked={form.wifiOnly} onChange={v => set('wifiOnly', v)} />
                 <NumberField label="Timeout de Tela (segundos)" hint="Bloqueio automático por inatividade" value={form.screenTimeoutSeconds!} min={15} max={3600} onChange={v => set('screenTimeoutSeconds', v)} />
               </Section>

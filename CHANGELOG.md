@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.6] — 2026-04-15 — Backend only
+
+### Summary
+Corrigido bug no backend: `device_users` com `isDeviceAdmin=true` recebia `sessionType: "operational"` no login online, impedindo que `applyAdminBypass()` fosse chamado no Android. A lógica de bypass admin do dispositivo (T.I) funcionava apenas no fluxo offline.
+
+### Fixed
+- **`device-user-auth.service.ts`** — `loginDeviceUser` agora retorna `sessionType: 'admin'` quando `operationalUser.isDeviceAdmin === true` (linha 54)
+
+### Decisions
+- Nenhuma mudança no APK — Android v2.7.3 já estava correto: chama `applyAdminBypass()` se `r.sessionType == "admin"`
+- O campo `isDeviceAdmin` já estava presente na entidade `DeviceUser` e era retornado por `validateCredentials`
+
+---
+
 ## [0.14.5] — 2026-04-15 — APK 2.7.3 (versionCode 66)
 
 ### Summary
