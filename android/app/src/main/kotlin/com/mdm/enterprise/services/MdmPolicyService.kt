@@ -474,28 +474,67 @@ class MdmPolicyService(private val context: Context) {
         Log.i(TAG, "selectiveWipe: Phase 2 done — accountsRemoved=$accountsRemoved")
 
         // ── Phase 3: Delete user files from storage ──
+        // ── Phase 3: Delete user files ──
+        // Auto-grant storage permissions via Device Owner before deleting
+        try {
+            dpm.setPermissionGrantState(adminComponent, context.packageName,
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+            dpm.setPermissionGrantState(adminComponent, context.packageName,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+        } catch (e: Exception) {
+            Log.w(TAG, "selectiveWipe: could not grant storage permissions: ${e.message}")
+        }
+        // Enable MANAGE_EXTERNAL_STORAGE via AppOps reflection (Android 11+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            try {
+                val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+                // setMode(String op, int uid, String packageName, int mode)
+                val setMode = appOps.javaClass.getMethod("setMode",
+                    String::class.java, Int::class.javaPrimitiveType,
+                    String::class.java, Int::class.javaPrimitiveType)
+                setMode.invoke(appOps, "android:manage_external_storage",
+                    android.os.Process.myUid(), context.packageName,
+                    android.app.AppOpsManager.MODE_ALLOWED)
+                Log.i(TAG, "selectiveWipe: MANAGE_EXTERNAL_STORAGE granted via AppOps")
+            } catch (e: Exception) {
+                Log.w(TAG, "selectiveWipe: AppOps grant failed: ${e.message}")
+            }
+        }
         Log.i(TAG, "selectiveWipe: Phase 3 — Deleting user files")
+        // Direct file deletion
         val storageDirs = listOf(
-            Environment.DIRECTORY_DOWNLOADS,
             Environment.DIRECTORY_DCIM,
             Environment.DIRECTORY_PICTURES,
+            Environment.DIRECTORY_DOWNLOADS,
             Environment.DIRECTORY_DOCUMENTS,
             Environment.DIRECTORY_MOVIES,
             Environment.DIRECTORY_MUSIC,
-            Environment.DIRECTORY_RINGTONES,
-            Environment.DIRECTORY_PODCASTS,
-            Environment.DIRECTORY_ALARMS,
-            Environment.DIRECTORY_NOTIFICATIONS,
         )
         for (dirName in storageDirs) {
             try {
                 val dir = Environment.getExternalStoragePublicDirectory(dirName)
                 if (dir.exists() && dir.isDirectory) {
-                    filesDeleted += deleteRecursive(dir)
+                    val count = deleteRecursive(dir)
+                    filesDeleted += count
+                    Log.d(TAG, "selectiveWipe: deleted $count files from $dirName")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "selectiveWipe: error deleting $dirName: ${e.message}")
             }
+        }
+        // Also clear MediaStore provider data to remove orphaned entries
+        try {
+            val mediaCleared = suspendCancellableCoroutine { cont ->
+                dpm.clearApplicationUserData(adminComponent,
+                    "com.android.providers.media.module", executor) { _, succeeded ->
+                    cont.resume(succeeded)
+                }
+            }
+            Log.i(TAG, "selectiveWipe: MediaStore provider cleared: $mediaCleared")
+        } catch (e: Exception) {
+            Log.w(TAG, "selectiveWipe: could not clear MediaStore: ${e.message}")
         }
         Log.i(TAG, "selectiveWipe: Phase 3 done — filesDeleted=$filesDeleted")
 

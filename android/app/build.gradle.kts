@@ -21,8 +21,8 @@ android {
         applicationId = "com.mdm.enterprise"
         minSdk = 25
         targetSdk = 36
-        versionCode = 68
-        versionName = "2.8.1"
+        versionCode = 69
+        versionName = "2.8.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3002/api/v1\"")
         buildConfigField("int", "COMMAND_POLL_INTERVAL_MINUTES", "15")
