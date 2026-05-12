@@ -159,7 +159,7 @@ class CommandPollingService : Service() {
         }
     }
 
-    /** Request battery optimization exemption via Device Owner to prevent OS from killing service. */
+    /** Silently whitelist from battery optimization — no user dialog. */
     @android.annotation.SuppressLint("BatteryLife")
     private fun requestBatteryExemption() {
         try {
@@ -168,14 +168,32 @@ class CommandPollingService : Service() {
                 Log.d(TAG, "Battery optimization already exempted")
                 return
             }
-            // Device Owner silently whitelists via intent (no user prompt for Device Owner apps)
-            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(android.net.Uri.parse("package:$packageName"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
-            Log.i(TAG, "Battery optimization exemption requested")
+            // Try silent whitelist via IDeviceIdleController (hidden API)
+            if (trySilentBatteryWhitelist()) return
+            // Do NOT fall back to startActivity() — it shows a dialog to the user.
+            // The foreground service + AlarmManager restart is sufficient protection.
+            Log.w(TAG, "Silent battery whitelist unavailable — relying on foreground service + alarm restart")
         } catch (e: Exception) {
             Log.w(TAG, "Could not request battery exemption: ${e.message}")
+        }
+    }
+
+    /** Try to silently add to battery whitelist via DeviceIdleController reflection. */
+    private fun trySilentBatteryWhitelist(): Boolean {
+        return try {
+            val svcBinder = Class.forName("android.os.ServiceManager")
+                .getMethod("getService", String::class.java)
+                .invoke(null, "deviceidle") as? android.os.IBinder ?: return false
+            val controller = Class.forName("android.os.IDeviceIdleController\$Stub")
+                .getMethod("asInterface", android.os.IBinder::class.java)
+                .invoke(null, svcBinder)!!
+            controller.javaClass.getMethod("addPowerSaveWhitelistApp", String::class.java)
+                .invoke(controller, packageName)
+            Log.i(TAG, "Battery optimization silently exempted via DeviceIdleController")
+            true
+        } catch (e: Exception) {
+            Log.d(TAG, "Silent battery whitelist failed: ${e.message}")
+            false
         }
     }
 
