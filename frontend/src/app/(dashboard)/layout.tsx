@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/layout/Sidebar'
+import WhatsNewModal from '@/components/WhatsNewModal'
 import { isAuthenticated } from '@/lib/auth'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="flex-1 ml-64 overflow-auto">
         {children}
       </main>
+      <WhatsNewModal />
     </div>
   )
 }
