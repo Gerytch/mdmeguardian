@@ -140,20 +140,27 @@ class CommandPollingService : Service() {
         super.onDestroy()
     }
 
-    /** Schedule an alarm to restart the service within 60 seconds if it gets killed. */
+    /** Schedule an alarm to restart the service if it gets killed.
+     *  Uses exact alarm if permission granted, otherwise inexact (still fires in Doze). */
     private fun scheduleRestart() {
         try {
             val restartIntent = Intent(applicationContext, CommandPollingService::class.java)
             val pi = android.app.PendingIntent.getService(
                 applicationContext, 0, restartIntent,
-                android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            am.setExactAndAllowWhileIdle(
-                android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                android.os.SystemClock.elapsedRealtime() + 60_000,
-                pi
-            )
+            val triggerAt = android.os.SystemClock.elapsedRealtime() + 60_000
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                // Android 12+ without SCHEDULE_EXACT_ALARM: use inexact (may delay up to ~5 min)
+                am.setAndAllowWhileIdle(
+                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi
+                )
+            } else {
+                am.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Could not schedule restart alarm: ${e.message}")
         }
