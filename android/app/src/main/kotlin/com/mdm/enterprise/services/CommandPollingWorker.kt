@@ -86,7 +86,11 @@ class CommandPollingWorker(
                     when (command.type) {
                         "LOCK" -> policyService.lockDevice()
                         "UNLOCK" -> policyService.unlockDevice()
-                        "WIPE" -> policyService.wipeDevice()
+                        "WIPE" -> {
+                            val wipeResult = policyService.selectiveWipe()
+                            result.putAll(wipeResult)
+                        }
+                        "FACTORY_RESET" -> policyService.factoryReset()
                         "REBOOT" -> policyService.reboot()
 
                         "ENABLE_KIOSK" -> {

@@ -1105,7 +1105,7 @@ export default function DeviceDetailPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-red-700">🗑️ Limpar Dispositivo (Wipe)</h3>
-              <p className="text-sm text-gray-500 mt-0.5">Esta ação é <strong>irreversível</strong>. Todos os dados do dispositivo serão apagados e ele voltará ao estado de fábrica.</p>
+              <p className="text-sm text-gray-500 mt-0.5">Todos os dados, contas, arquivos e cache serão apagados. O <strong>E.Guardian permanecerá instalado</strong> para rastreio.</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -1142,7 +1142,7 @@ export default function DeviceDetailPage() {
                       adminPassword: wipePassword,
                     })
                     setShowWipe(false)
-                    setMsg({ type: 'success', text: 'Comando WIPE enviado — o dispositivo será restaurado para padrão de fábrica' })
+                    setMsg({ type: 'success', text: 'Comando WIPE enviado — dados, contas e arquivos serão apagados (E.Guardian permanece instalado)' })
                     setTimeout(load, 800)
                   } catch (err: any) {
                     const m = err.response?.data?.message

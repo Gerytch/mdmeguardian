@@ -25,7 +25,7 @@ export const releaseNotes: ReleaseNote[] = [
   {
     version: '0.15.0',
     date: '2026-05-12',
-    title: 'Bloqueio de Restauração de Fábrica + Wipe Remoto',
+    title: 'Bloqueio de Restauração de Fábrica + Wipe Seletivo',
     type: 'Sistema + APK',
     apkVersion: '2.8.0 (build 67)',
     systemItems: [
@@ -36,6 +36,7 @@ export const releaseNotes: ReleaseNote[] = [
     apkItems: [
       'Novo: Bloqueio de restauração de fábrica — impede o usuário de restaurar o dispositivo (DISALLOW_FACTORY_RESET + DISALLOW_SAFE_BOOT)',
       'Novo: Proteção aplicada automaticamente ao iniciar o agente, antes mesmo de receber a política',
+      'Melhoria: Wipe seletivo — limpa dados de apps, contas e arquivos sem remover o E.Guardian do dispositivo',
     ],
   },
   {

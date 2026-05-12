@@ -306,7 +306,7 @@ class CommandPollingService : Service() {
             android.os.PowerManager.PARTIAL_WAKE_LOCK,
             "MDM:cmdExec"
         )
-        cmdWakeLock.acquire(60_000L) // max 60s safety timeout
+        cmdWakeLock.acquire(300_000L) // max 5min — selective wipe may take a while
 
         try {
         var killForUpdate = false
@@ -320,7 +320,11 @@ class CommandPollingService : Service() {
                 when (command.type) {
                     "LOCK"   -> policyService.lockDevice()
                     "UNLOCK" -> policyService.unlockDevice()
-                    "WIPE"   -> policyService.wipeDevice()
+                    "WIPE"   -> {
+                        val wipeResult = policyService.selectiveWipe()
+                        result.putAll(wipeResult)
+                    }
+                    "FACTORY_RESET" -> policyService.factoryReset()
                     "REBOOT" -> policyService.reboot()
 
                     "RENAME_DEVICE" -> {

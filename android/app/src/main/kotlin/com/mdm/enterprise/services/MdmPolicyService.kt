@@ -1,17 +1,23 @@
 package com.mdm.enterprise.services
 
 import android.Manifest
+import android.accounts.AccountManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Environment
 import android.os.UserManager
 import android.util.Log
 import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.models.PolicyRules
 import com.mdm.enterprise.ui.AdminLockActivity
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
+import java.util.concurrent.Executors
+import kotlin.coroutines.resume
 
 class MdmPolicyService(private val context: Context) {
 
@@ -378,13 +384,136 @@ class MdmPolicyService(private val context: Context) {
         }
     }
 
-    fun wipeDevice() {
+    fun factoryReset() {
         try {
-            dpm.wipeData(DevicePolicyManager.WIPE_RESET_PROTECTION_DATA)
-            Log.i(TAG, "Device wipe initiated")
+            try {
+                dpm.wipeData(DevicePolicyManager.WIPE_RESET_PROTECTION_DATA)
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "WIPE_RESET_PROTECTION_DATA failed, falling back to wipeData(0): ${e.message}")
+                dpm.wipeData(0)
+            }
+            Log.i(TAG, "Factory reset initiated")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to wipe device", e)
+            Log.e(TAG, "Failed to factory reset device", e)
         }
+    }
+
+    /**
+     * Selective wipe: clears all app data, removes accounts, and deletes user files
+     * while keeping E.Guardian installed for continued tracking.
+     */
+    suspend fun selectiveWipe(): Map<String, Any> {
+        if (!isDeviceOwner) {
+            Log.w(TAG, "selectiveWipe: Device Owner required")
+            return mapOf("error" to "Device Owner required")
+        }
+
+        val executor = Executors.newSingleThreadExecutor()
+        var appsCleared = 0
+        var appsFailed = 0
+        var accountsRemoved = 0
+        var filesDeleted = 0
+
+        // ── Phase 1: Clear app data (except E.Guardian) ──
+        Log.i(TAG, "selectiveWipe: Phase 1 — Clearing app data")
+        val pm = context.packageManager
+        val packages = pm.getInstalledPackages(0)
+            .map { it.packageName }
+            .filter { it != context.packageName }
+
+        for (pkg in packages) {
+            try {
+                val cleared = suspendCancellableCoroutine { cont ->
+                    dpm.clearApplicationUserData(adminComponent, pkg, executor) { _, succeeded ->
+                        cont.resume(succeeded)
+                    }
+                }
+                if (cleared) {
+                    appsCleared++
+                    Log.d(TAG, "selectiveWipe: cleared data for $pkg")
+                } else {
+                    appsFailed++
+                    Log.w(TAG, "selectiveWipe: failed to clear data for $pkg")
+                }
+            } catch (e: Exception) {
+                appsFailed++
+                Log.w(TAG, "selectiveWipe: error clearing $pkg: ${e.message}")
+            }
+        }
+        Log.i(TAG, "selectiveWipe: Phase 1 done — cleared=$appsCleared failed=$appsFailed")
+
+        // ── Phase 2: Remove accounts ──
+        Log.i(TAG, "selectiveWipe: Phase 2 — Removing accounts")
+        try {
+            val accountManager = AccountManager.get(context)
+            val accounts = accountManager.accounts
+            for (account in accounts) {
+                try {
+                    val removed = accountManager.removeAccountExplicitly(account)
+                    if (removed) {
+                        accountsRemoved++
+                        Log.d(TAG, "selectiveWipe: removed account ${account.type}/${account.name}")
+                    } else {
+                        Log.w(TAG, "selectiveWipe: could not remove account ${account.type}/${account.name}")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "selectiveWipe: error removing account ${account.type}: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "selectiveWipe: Phase 2 error", e)
+        }
+        Log.i(TAG, "selectiveWipe: Phase 2 done — accountsRemoved=$accountsRemoved")
+
+        // ── Phase 3: Delete user files from storage ──
+        Log.i(TAG, "selectiveWipe: Phase 3 — Deleting user files")
+        val storageDirs = listOf(
+            Environment.DIRECTORY_DOWNLOADS,
+            Environment.DIRECTORY_DCIM,
+            Environment.DIRECTORY_PICTURES,
+            Environment.DIRECTORY_DOCUMENTS,
+            Environment.DIRECTORY_MOVIES,
+            Environment.DIRECTORY_MUSIC,
+            Environment.DIRECTORY_RINGTONES,
+            Environment.DIRECTORY_PODCASTS,
+            Environment.DIRECTORY_ALARMS,
+            Environment.DIRECTORY_NOTIFICATIONS,
+        )
+        for (dirName in storageDirs) {
+            try {
+                val dir = Environment.getExternalStoragePublicDirectory(dirName)
+                if (dir.exists() && dir.isDirectory) {
+                    filesDeleted += deleteRecursive(dir)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "selectiveWipe: error deleting $dirName: ${e.message}")
+            }
+        }
+        Log.i(TAG, "selectiveWipe: Phase 3 done — filesDeleted=$filesDeleted")
+
+        executor.shutdown()
+        Log.i(TAG, "selectiveWipe: COMPLETE — apps=$appsCleared/$appsFailed accounts=$accountsRemoved files=$filesDeleted")
+
+        return mapOf(
+            "appsCleared" to appsCleared,
+            "appsFailed" to appsFailed,
+            "accountsRemoved" to accountsRemoved,
+            "filesDeleted" to filesDeleted,
+        )
+    }
+
+    /** Recursively deletes files inside a directory (keeps the directory itself). */
+    private fun deleteRecursive(dir: File): Int {
+        var count = 0
+        dir.listFiles()?.forEach { file ->
+            if (file.isDirectory) {
+                count += deleteRecursive(file)
+                file.delete()
+            } else {
+                if (file.delete()) count++
+            }
+        }
+        return count
     }
 
     fun adminLock(message: String, contact: String?, severity: String) {

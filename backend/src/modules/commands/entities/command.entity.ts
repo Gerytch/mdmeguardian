@@ -30,6 +30,7 @@ export enum CommandType {
   UPDATE_AGENT = 'UPDATE_AGENT',
   UNINSTALL_AGENT = 'UNINSTALL_AGENT',
   RENAME_DEVICE = 'RENAME_DEVICE',
+  FACTORY_RESET = 'FACTORY_RESET',
 }
 
 export enum CommandStatus {
