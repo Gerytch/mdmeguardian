@@ -14,7 +14,9 @@ import android.util.Log
 import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.api.models.PolicyRules
 import com.mdm.enterprise.ui.AdminLockActivity
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -407,19 +409,25 @@ class MdmPolicyService(private val context: Context) {
             Log.w(TAG, "selectiveWipe: Device Owner required")
             return mapOf("error" to "Device Owner required")
         }
+        // NonCancellable prevents the polling loop restart from killing the wipe mid-execution
+        return withContext(NonCancellable) { selectiveWipeInternal() }
+    }
 
+    private suspend fun selectiveWipeInternal(): Map<String, Any> {
         val executor = Executors.newSingleThreadExecutor()
         var appsCleared = 0
         var appsFailed = 0
         var accountsRemoved = 0
         var filesDeleted = 0
 
-        // ── Phase 1: Clear app data (except E.Guardian) ──
+        // ── Phase 1: Clear app data (user-installed apps only, skip system apps) ──
         Log.i(TAG, "selectiveWipe: Phase 1 — Clearing app data")
         val pm = context.packageManager
         val packages = pm.getInstalledPackages(0)
+            .filter { it.packageName != context.packageName }
+            .filter { it.applicationInfo != null && (it.applicationInfo!!.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
             .map { it.packageName }
-            .filter { it != context.packageName }
+        Log.i(TAG, "selectiveWipe: ${packages.size} user apps to clear")
 
         for (pkg in packages) {
             try {
