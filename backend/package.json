@@ -1,6 +1,6 @@
 {
   "name": "mdm-saas-backend",
-  "version": "1.0.0",
+  "version": "0.15.0",
   "description": "MDM SaaS Backend API - NestJS",
   "private": true,
   "scripts": {

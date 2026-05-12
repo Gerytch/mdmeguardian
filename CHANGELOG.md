@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.15.0] — 2026-05-12 — Production Baseline
+
+### Summary
+Marco de produção: versões sincronizadas entre todos os componentes, tags git criadas, esquema de versionamento estabelecido.
+
+### Components
+- **Android APK**: v2.8.6 (versionCode 73)
+- **Backend**: v0.15.0
+- **Frontend**: v0.15.0
+
+### Changed
+- Sincronizadas versões de backend (era 1.0.0) e frontend (era 0.1.0) para 0.15.0
+- Estabelecido esquema de tags git: `v{version}` (sistema), `android/v{version}` (APK)
+- Este commit é o ponto de rollback base para produção
+
+### Notes
+- **Database**: produção ativa — migrações são incrementais, nunca destrutivas
+- **APK em campo**: devices com v2.8.6 (versionCode 73) em produção
+
+---
+
 ## [0.14.6] — 2026-04-15 — Backend only
 
 ### Summary
