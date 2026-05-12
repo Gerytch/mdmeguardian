@@ -19,7 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar onWhatsNew={() => setWhatsNewOpen(true)} />
-      <main className="flex-1 ml-64 overflow-auto">
+      <main className="flex-1 ml-64 overflow-auto relative z-0">
         {children}
       </main>
       <WhatsNewModal externalOpen={whatsNewOpen} onExternalClose={() => setWhatsNewOpen(false)} />

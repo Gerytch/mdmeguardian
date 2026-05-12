@@ -27,17 +27,19 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-05-12',
     title: 'Bloqueio de Restauração de Fábrica + Wipe Seletivo',
     type: 'Sistema + APK',
-    apkVersion: '2.8.2 (build 69)',
+    apkVersion: '2.8.3 (build 70)',
     systemItems: [
       'Novo: Botão "Limpar Dispositivo (Wipe)" na página do device — exige senha do administrador para confirmar',
       'Novo: Toggle "Bloquear Restauração de Fábrica" no editor de políticas (seção Segurança)',
       'Novo: Popup "Novidades" ao logar no dashboard com histórico de atualizações',
       'Novo: Botão "Atualizações" no menu lateral para consultar novidades a qualquer momento',
+      'Corrigido: Mapa não sobrepõe mais o popup de novidades ao carregar o dashboard',
     ],
     apkItems: [
       'Novo: Bloqueio de restauração de fábrica — impede o usuário de restaurar o dispositivo (DISALLOW_FACTORY_RESET + DISALLOW_SAFE_BOOT)',
       'Novo: Proteção aplicada automaticamente ao iniciar o agente, antes mesmo de receber a política',
       'Melhoria: Wipe seletivo — limpa dados de apps, contas e arquivos sem remover o E.Guardian do dispositivo',
+      'Corrigido: Dispositivo permanece online continuamente enquanto tiver rede — proteção contra otimização de bateria e restart automático do serviço',
     ],
   },
   {

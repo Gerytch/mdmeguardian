@@ -109,6 +109,9 @@ class CommandPollingService : Service() {
             policyService.blockFactoryReset(true)
         }
 
+        // Request battery optimization exemption so the OS doesn't kill the service
+        requestBatteryExemption()
+
         // Check if a self-update was in progress — report result to backend
         checkPendingAgentUpdate()
 
@@ -120,13 +123,60 @@ class CommandPollingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.w(TAG, "Task removed — scheduling service restart")
+        scheduleRestart()
+    }
+
     override fun onDestroy() {
+        Log.w(TAG, "Service destroyed — scheduling restart")
         try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             cm.unregisterNetworkCallback(connectivityCallback)
         } catch (_: Exception) {}
+        scheduleRestart()
         scope.cancel()
         super.onDestroy()
+    }
+
+    /** Schedule an alarm to restart the service within 60 seconds if it gets killed. */
+    private fun scheduleRestart() {
+        try {
+            val restartIntent = Intent(applicationContext, CommandPollingService::class.java)
+            val pi = android.app.PendingIntent.getService(
+                applicationContext, 0, restartIntent,
+                android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            am.setExactAndAllowWhileIdle(
+                android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                android.os.SystemClock.elapsedRealtime() + 60_000,
+                pi
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not schedule restart alarm: ${e.message}")
+        }
+    }
+
+    /** Request battery optimization exemption via Device Owner to prevent OS from killing service. */
+    @android.annotation.SuppressLint("BatteryLife")
+    private fun requestBatteryExemption() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            if (pm.isIgnoringBatteryOptimizations(packageName)) {
+                Log.d(TAG, "Battery optimization already exempted")
+                return
+            }
+            // Device Owner silently whitelists via intent (no user prompt for Device Owner apps)
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(android.net.Uri.parse("package:$packageName"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            Log.i(TAG, "Battery optimization exemption requested")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not request battery exemption: ${e.message}")
+        }
     }
 
     /** On service start (including after self-update), check if there was a pending UPDATE_AGENT

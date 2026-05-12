@@ -222,7 +222,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Map */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-hidden isolate relative z-0">
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <div>
             <h2 className="font-semibold text-gray-900">Localização dos Dispositivos</h2>
