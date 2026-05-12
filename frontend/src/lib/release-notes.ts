@@ -32,6 +32,7 @@ export const releaseNotes: ReleaseNote[] = [
       'Novo: Botão "Limpar Dispositivo (Wipe)" na página do device — exige senha do administrador para confirmar',
       'Novo: Toggle "Bloquear Restauração de Fábrica" no editor de políticas (seção Segurança)',
       'Novo: Popup "Novidades" ao logar no dashboard com histórico de atualizações',
+      'Novo: Botão "Atualizações" no menu lateral para consultar novidades a qualquer momento',
     ],
     apkItems: [
       'Novo: Bloqueio de restauração de fábrica — impede o usuário de restaurar o dispositivo (DISALLOW_FACTORY_RESET + DISALLOW_SAFE_BOOT)',

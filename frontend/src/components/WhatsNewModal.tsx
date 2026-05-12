@@ -72,22 +72,30 @@ function SectionItems({ note }: { note: ReleaseNote }) {
   )
 }
 
-export default function WhatsNewModal() {
-  const [open, setOpen] = useState(false)
+interface WhatsNewModalProps {
+  externalOpen?: boolean
+  onExternalClose?: () => void
+}
+
+export default function WhatsNewModal({ externalOpen, onExternalClose }: WhatsNewModalProps = {}) {
+  const [autoOpen, setAutoOpen] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
   useEffect(() => {
     const lastSeen = localStorage.getItem(LS_KEY)
     if (lastSeen !== CURRENT_VERSION) {
-      setOpen(true)
+      setAutoOpen(true)
     }
   }, [])
+
+  const open = autoOpen || externalOpen
 
   const handleClose = () => {
     if (dontShowAgain) {
       localStorage.setItem(LS_KEY, CURRENT_VERSION)
     }
-    setOpen(false)
+    setAutoOpen(false)
+    onExternalClose?.()
   }
 
   if (!open) return null
