@@ -35,7 +35,6 @@ android/keystore/
 *.apk
 *.aab
 *.keystore
-!releases/*.apk
 *.jks
 
 # =====================
@@ -43,6 +42,7 @@ android/keystore/
 # =====================
 database/*.sql
 database/data/
+database/reset.js
 
 # =====================
 # Logs
@@ -89,8 +89,15 @@ backend/uploads/
 *.tsbuildinfo
 
 # =====================
+# npm (não publicamos no npm)
+# =====================
+.npmignore
+**/.npmignore
+
+# =====================
 # Misc
 # =====================
 *.tmp
 *.bak
 scripts/.emu_tokens
+skills-lock.json

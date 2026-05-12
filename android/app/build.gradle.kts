@@ -1,7 +1,16 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+}
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -10,10 +19,10 @@ android {
 
     signingConfigs {
         create("homologRelease") {
-            storeFile = file("C:/keys/eguardian-release.keystore")
-            storePassword = "eguardian123"
-            keyAlias = "eguardian"
-            keyPassword = "eguardian123"
+            storeFile = file(localProperties.getProperty("KEYSTORE_FILE", ""))
+            storePassword = localProperties.getProperty("KEYSTORE_PASSWORD", "")
+            keyAlias = localProperties.getProperty("KEY_ALIAS", "")
+            keyPassword = localProperties.getProperty("KEY_PASSWORD", "")
         }
     }
 
