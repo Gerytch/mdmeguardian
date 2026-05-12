@@ -3,7 +3,11 @@ export interface ReleaseNote {
   date: string
   title: string
   type: 'Sistema' | 'APK' | 'Sistema + APK'
-  items: string[]
+  /** Itens agrupados por seção. Se só tem uma seção, use apenas systemItems ou apkItems. */
+  systemItems?: string[]
+  apkItems?: string[]
+  /** APK versionName + versionCode quando houver nova versão do agente */
+  apkVersion?: string
 }
 
 /**
@@ -11,6 +15,11 @@ export interface ReleaseNote {
  * Adicione novas versões no TOPO do array.
  * O popup aparece quando a versão mais recente (índice 0) for diferente
  * da última versão vista pelo usuário (salva em localStorage).
+ *
+ * Padrão obrigatório dos itens:
+ *   - "Novo: ..."       (✦) — funcionalidade nova
+ *   - "Corrigido: ..."  (✓) — bug fix
+ *   - "Melhoria: ..."   (•) — melhoria em funcionalidade existente
  */
 export const releaseNotes: ReleaseNote[] = [
   {
@@ -18,11 +27,15 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-05-12',
     title: 'Bloqueio de Restauração de Fábrica + Wipe Remoto',
     type: 'Sistema + APK',
-    items: [
-      'Novo: Bloqueio de restauração de fábrica — impede que o usuário restaure o dispositivo para padrão de fábrica (ativado por padrão na política)',
+    apkVersion: '2.8.0 (build 67)',
+    systemItems: [
       'Novo: Botão "Limpar Dispositivo (Wipe)" na página do device — exige senha do administrador para confirmar',
       'Novo: Toggle "Bloquear Restauração de Fábrica" no editor de políticas (seção Segurança)',
-      'Segurança: Proteção aplicada automaticamente ao iniciar o agente, antes mesmo de receber a política',
+      'Novo: Popup "Novidades" ao logar no dashboard com histórico de atualizações',
+    ],
+    apkItems: [
+      'Novo: Bloqueio de restauração de fábrica — impede o usuário de restaurar o dispositivo (DISALLOW_FACTORY_RESET + DISALLOW_SAFE_BOOT)',
+      'Novo: Proteção aplicada automaticamente ao iniciar o agente, antes mesmo de receber a política',
     ],
   },
   {
@@ -30,7 +43,7 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-04-15',
     title: 'Correção de Login Admin no Dispositivo',
     type: 'Sistema',
-    items: [
+    systemItems: [
       'Corrigido: Usuários admin (T.I.) agora recebem corretamente o bypass de restrições ao fazer login online no dispositivo',
     ],
   },
@@ -39,7 +52,8 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-04-15',
     title: 'Restauração de Política após Logout Admin',
     type: 'APK',
-    items: [
+    apkVersion: '2.7.3 (build 66)',
+    apkItems: [
       'Corrigido: Política completa (câmera, USB, screenshots, etc.) agora é re-aplicada corretamente após logout do usuário admin T.I.',
       'Melhoria: Regras da política persistem no dispositivo para restauração automática',
     ],
@@ -49,7 +63,8 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-04-15',
     title: 'Timeout de Inatividade — Android 14+',
     type: 'APK',
-    items: [
+    apkVersion: '2.7.2 (build 65)',
+    apkItems: [
       'Corrigido: Timeout de inatividade não dispara mais ao navegar fora do E.Guardian em Android 14+',
     ],
   },
@@ -58,7 +73,8 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-04-15',
     title: 'Correção de Timeout de Inatividade',
     type: 'APK',
-    items: [
+    apkVersion: '2.7.0 (build 63)',
+    apkItems: [
       'Corrigido: Timer de inatividade agora detecta toque real em vez de "tela ligada"',
     ],
   },

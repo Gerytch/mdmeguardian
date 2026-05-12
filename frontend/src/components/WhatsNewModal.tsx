@@ -18,6 +18,60 @@ function typeBadge(type: ReleaseNote['type']) {
   )
 }
 
+function itemIcon(text: string) {
+  if (text.startsWith('Novo')) return <span className="text-emerald-500 flex-shrink-0">✦</span>
+  if (text.startsWith('Corrigido')) return <span className="text-blue-500 flex-shrink-0">✓</span>
+  return <span className="text-gray-400 flex-shrink-0">•</span>
+}
+
+function ItemList({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+          <span className="mt-0.5">{itemIcon(item)}</span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SectionItems({ note }: { note: ReleaseNote }) {
+  const hasSystem = note.systemItems && note.systemItems.length > 0
+  const hasApk = note.apkItems && note.apkItems.length > 0
+  const hasBoth = hasSystem && hasApk
+
+  return (
+    <div className="space-y-3">
+      {hasSystem && (
+        <div>
+          {hasBoth && (
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Sistema</span>
+              <div className="flex-1 border-t border-blue-100" />
+            </div>
+          )}
+          <ItemList items={note.systemItems!} />
+        </div>
+      )}
+      {hasApk && (
+        <div>
+          {hasBoth && (
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">
+                APK {note.apkVersion ? `v${note.apkVersion}` : ''}
+              </span>
+              <div className="flex-1 border-t border-green-100" />
+            </div>
+          )}
+          <ItemList items={note.apkItems!} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function WhatsNewModal() {
   const [open, setOpen] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
@@ -38,7 +92,6 @@ export default function WhatsNewModal() {
 
   if (!open) return null
 
-  // Show latest version details + summary of previous ones
   const [latest, ...older] = releaseNotes
 
   return (
@@ -62,26 +115,20 @@ export default function WhatsNewModal() {
           {/* Latest version - featured */}
           {latest && (
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-bold text-gray-900">v{latest.version}</span>
                 {typeBadge(latest.type)}
                 <span className="text-xs text-gray-400 ml-auto">{latest.date}</span>
               </div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{latest.title}</h3>
-              <ul className="space-y-1.5">
-                {latest.items.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                    <span className="text-primary-500 mt-0.5 flex-shrink-0">
-                      {item.startsWith('Novo') ? '✦' : item.startsWith('Corrigido') ? '✓' : '•'}
-                    </span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+              {latest.apkVersion && (
+                <p className="text-xs text-green-600 font-medium mb-2">APK v{latest.apkVersion}</p>
+              )}
+              <h3 className="text-sm font-semibold text-gray-800 mb-3">{latest.title}</h3>
+              <SectionItems note={latest} />
             </div>
           )}
 
-          {/* Previous versions - compact */}
+          {/* Previous versions - compact with expandable details */}
           {older.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -89,16 +136,23 @@ export default function WhatsNewModal() {
               </p>
               <div className="space-y-3">
                 {older.map((note) => (
-                  <div key={note.version} className="flex items-start gap-3 pb-3 border-b border-gray-50 last:border-0">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-xs font-semibold text-gray-700">v{note.version}</span>
-                        {typeBadge(note.type)}
-                        <span className="text-xs text-gray-400 ml-auto">{note.date}</span>
-                      </div>
-                      <p className="text-xs text-gray-500 truncate">{note.title}</p>
+                  <details key={note.version} className="group pb-3 border-b border-gray-50 last:border-0">
+                    <summary className="flex items-center gap-2 cursor-pointer list-none">
+                      <svg className="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="text-xs font-semibold text-gray-700">v{note.version}</span>
+                      {typeBadge(note.type)}
+                      {note.apkVersion && (
+                        <span className="text-xs text-green-600">APK v{note.apkVersion}</span>
+                      )}
+                      <span className="text-xs text-gray-400 ml-auto">{note.date}</span>
+                    </summary>
+                    <div className="mt-2 ml-5">
+                      <p className="text-xs font-medium text-gray-600 mb-2">{note.title}</p>
+                      <SectionItems note={note} />
                     </div>
-                  </div>
+                  </details>
                 ))}
               </div>
             </div>
