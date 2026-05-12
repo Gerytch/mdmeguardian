@@ -109,8 +109,8 @@ class CommandPollingService : Service() {
             policyService.blockFactoryReset(true)
         }
 
-        // Request battery optimization exemption so the OS doesn't kill the service
-        requestBatteryExemption()
+        // Ensure Device Owner service survives battery optimization (no dialog)
+        ensureServicePersistence()
 
         // Check if a self-update was in progress — report result to backend
         checkPendingAgentUpdate()
@@ -159,41 +159,39 @@ class CommandPollingService : Service() {
         }
     }
 
-    /** Silently whitelist from battery optimization — no user dialog. */
-    @android.annotation.SuppressLint("BatteryLife")
-    private fun requestBatteryExemption() {
+    /**
+     * Ensure Device Owner service survives battery optimization.
+     * NEVER shows a dialog — Device Owner must run silently.
+     *
+     * Strategy (5 layers):
+     *  1. Foreground service + START_STICKY (OS restarts automatically)
+     *  2. AlarmManager exact alarm (60s heartbeat — reschedules every onStartCommand)
+     *  3. WorkManager periodic (15-min backup watchdog)
+     *  4. onTaskRemoved / onDestroy schedule restart
+     *  5. setUninstallBlocked — prevents user from uninstalling or force-stopping
+     */
+    private fun ensureServicePersistence() {
         try {
-            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-            if (pm.isIgnoringBatteryOptimizations(packageName)) {
-                Log.d(TAG, "Battery optimization already exempted")
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val admin = android.content.ComponentName(this, com.mdm.enterprise.admin.MdmDeviceAdminReceiver::class.java)
+
+            if (!dpm.isDeviceOwnerApp(packageName)) {
+                Log.d(TAG, "Not Device Owner — skipping persistence setup")
                 return
             }
-            // Try silent whitelist via IDeviceIdleController (hidden API)
-            if (trySilentBatteryWhitelist()) return
-            // Do NOT fall back to startActivity() — it shows a dialog to the user.
-            // The foreground service + AlarmManager restart is sufficient protection.
-            Log.w(TAG, "Silent battery whitelist unavailable — relying on foreground service + alarm restart")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not request battery exemption: ${e.message}")
-        }
-    }
 
-    /** Try to silently add to battery whitelist via DeviceIdleController reflection. */
-    private fun trySilentBatteryWhitelist(): Boolean {
-        return try {
-            val svcBinder = Class.forName("android.os.ServiceManager")
-                .getMethod("getService", String::class.java)
-                .invoke(null, "deviceidle") as? android.os.IBinder ?: return false
-            val controller = Class.forName("android.os.IDeviceIdleController\$Stub")
-                .getMethod("asInterface", android.os.IBinder::class.java)
-                .invoke(null, svcBinder)!!
-            controller.javaClass.getMethod("addPowerSaveWhitelistApp", String::class.java)
-                .invoke(controller, packageName)
-            Log.i(TAG, "Battery optimization silently exempted via DeviceIdleController")
-            true
+            // Prevent app from being uninstalled or force-stopped by the user
+            try {
+                dpm.setUninstallBlocked(admin, packageName, true)
+            } catch (_: Exception) {}
+
+            // Schedule heartbeat alarm — reschedules itself every onStartCommand
+            // so even if the OS kills the process without calling onDestroy, the alarm fires
+            scheduleRestart()
+
+            Log.i(TAG, "Device Owner persistence configured — service will survive battery optimization")
         } catch (e: Exception) {
-            Log.d(TAG, "Silent battery whitelist failed: ${e.message}")
-            false
+            Log.w(TAG, "Persistence setup error: ${e.message}")
         }
     }
 
