@@ -27,7 +27,7 @@ export const releaseNotes: ReleaseNote[] = [
     date: '2026-05-12',
     title: 'Bloqueio de Restauração de Fábrica + Wipe Seletivo',
     type: 'Sistema + APK',
-    apkVersion: '2.8.0 (build 67)',
+    apkVersion: '2.8.1 (build 68)',
     systemItems: [
       'Novo: Botão "Limpar Dispositivo (Wipe)" na página do device — exige senha do administrador para confirmar',
       'Novo: Toggle "Bloquear Restauração de Fábrica" no editor de políticas (seção Segurança)',
