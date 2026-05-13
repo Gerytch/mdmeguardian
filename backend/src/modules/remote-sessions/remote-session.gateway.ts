@@ -5,6 +5,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import { Server } from 'ws';
 import { IncomingMessage } from 'http';
 import { Repository } from 'typeorm';
@@ -20,6 +21,7 @@ interface WsClient extends WebSocket {
   deviceId?: string;
 }
 
+@Public()
 @WebSocketGateway({ path: '/remote' })
 export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
