@@ -6,15 +6,14 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
-import { Server } from 'ws';
+import { Server, WebSocket as WS } from 'ws';
 import { IncomingMessage } from 'http';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import WebSocket from 'ws';
 import { RemoteSession, RemoteSessionStatus } from './remote-session.entity';
 import { Device } from '../devices/entities/device.entity';
 
-interface WsClient extends WebSocket {
+interface WsClient extends WS {
   isAlive: boolean;
   role: 'device' | 'viewer';
   sessionId: string;
@@ -116,7 +115,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
           client.send(JSON.stringify({ type: 'device_connected' }));
         }
         // Request a fresh frame from the device for the new viewer
-        if (room.device && room.device.readyState === WebSocket.OPEN) {
+        if (room.device && room.device.readyState === WS.OPEN) {
           room.device.send(JSON.stringify({ type: 'request_frame' }));
         }
         this.logger.log(`Viewer connected to session ${sessionId}`);
@@ -151,7 +150,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
     } else {
       room.viewers.delete(client);
       // If no more viewers, tell device to stop capturing
-      if (room.viewers.size === 0 && room.device && room.device.readyState === WebSocket.OPEN) {
+      if (room.viewers.size === 0 && room.device && room.device.readyState === WS.OPEN) {
         room.device.send(JSON.stringify({ type: 'stop_capture' }));
       }
       this.logger.log(`Viewer disconnected from session ${sessionId}`);
@@ -176,7 +175,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
       if (isBinary) {
         // Binary data = JPEG frame from device screen capture, relay to all viewers
         for (const viewer of room.viewers) {
-          if (viewer.readyState === WebSocket.OPEN) {
+          if (viewer.readyState === WS.OPEN) {
             viewer.send(data, { binary: true });
           }
         }
@@ -186,7 +185,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
       }
     } else {
       // Viewer sending input events (touch, key) -> relay to device
-      if (room.device && room.device.readyState === WebSocket.OPEN) {
+      if (room.device && room.device.readyState === WS.OPEN) {
         room.device.send(data.toString());
       }
     }
@@ -196,7 +195,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
     const room = this.sessions.get(sessionId);
     if (!room) return;
     for (const viewer of room.viewers) {
-      if (viewer.readyState === WebSocket.OPEN) {
+      if (viewer.readyState === WS.OPEN) {
         viewer.send(message);
       }
     }
@@ -212,12 +211,12 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
 
     const msg = JSON.stringify({ type: 'session_ended', reason: 'closed_by_admin' });
 
-    if (room.device && room.device.readyState === WebSocket.OPEN) {
+    if (room.device && room.device.readyState === WS.OPEN) {
       room.device.send(msg);
       room.device.close(1000, 'Session closed');
     }
     for (const viewer of room.viewers) {
-      if (viewer.readyState === WebSocket.OPEN) {
+      if (viewer.readyState === WS.OPEN) {
         viewer.send(msg);
         viewer.close(1000, 'Session closed');
       }
