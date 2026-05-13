@@ -23,6 +23,42 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.17.0',
+    date: '2026-05-13',
+    title: 'Acesso Remoto — Streaming H.264 em Tempo Real',
+    type: 'Sistema + APK',
+    systemItems: [
+      'Novo: Streaming H.264 em tempo real via hardware encoder — de 2 FPS (screenshots) para 20 FPS (vídeo)',
+      'Novo: Badge de modo no viewer (JPEG / H.264) com indicador de FPS em tempo real',
+      'Novo: Cache de keyframe no backend — novos viewers conectam e veem a tela instantaneamente',
+      'Melhoria: Modo JPEG otimizado como fallback — intervalo de 500ms reduzido para 150ms (~6 FPS), resolução escalada para 720p',
+      'Melhoria: Frontend usa WebCodecs VideoDecoder para decodificação H.264 nativa no browser',
+    ],
+    apkItems: [
+      'Novo: Pipeline MediaProjection + MediaCodec — captura e encoding por hardware (H.264 Baseline, 1.5 Mbps, 20 FPS)',
+      'Novo: Upgrade automático de JPEG para H.264 — admin aprova permissão de gravação remotamente pelo viewer',
+      'Novo: Suporte a request_keyframe — viewers que entram tarde recebem frame instantâneo',
+      'Corrigido: Taps na tela do acesso remoto não funcionavam — faltava canPerformGestures na config do serviço de acessibilidade',
+      'Melhoria: Logging de resultado de tap/swipe para diagnóstico em produção',
+    ],
+  },
+  {
+    version: '0.16.0',
+    date: '2026-05-13',
+    title: 'Acesso Remoto — Visualização de Tela + Controle',
+    type: 'Sistema + APK',
+    systemItems: [
+      'Novo: Viewer de acesso remoto com visualização da tela do dispositivo em tempo real',
+      'Novo: Controle remoto — tap, swipe e botões de navegação (voltar, home, recentes)',
+      'Novo: Gateway WebSocket para relay bidirecional device ↔ viewer',
+    ],
+    apkItems: [
+      'Novo: Captura de tela via AccessibilityService com envio por WebSocket',
+      'Novo: Injeção de gestos remotos (tap, swipe) via dispatchGesture',
+      'Novo: Ações globais remotas (back, home, recents) via performGlobalAction',
+    ],
+  },
+  {
     version: '0.15.0',
     date: '2026-05-12',
     title: 'Bloqueio de Restauração de Fábrica + Wipe Seletivo',

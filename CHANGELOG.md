@@ -4,6 +4,67 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.17.0] — 2026-05-13 — H.264 Streaming Remote Access
+
+### Summary
+Acesso remoto evolui de screenshots JPEG (2 FPS) para streaming H.264 em tempo real (20 FPS) via hardware encoder. O sistema inicia em modo JPEG otimizado (~6 FPS) e faz upgrade automático para H.264 quando o admin aprova a permissão de MediaProjection remotamente pelo viewer.
+
+### Components
+- **Android APK**: MediaProjection + MediaCodec H.264 pipeline
+- **Backend**: v0.17.0 — cache de keyframe para viewers tardios
+- **Frontend**: v0.17.0 — WebCodecs VideoDecoder + badge de modo
+
+### Added
+- **Android**: `RemoteAccessActivity` — activity transparente para solicitar permissão de MediaProjection
+- **Android**: `RemoteViewService` reescrito — dual-mode JPEG (fallback) + H.264 (streaming)
+- **Android**: Pipeline MediaCodec: H.264 Baseline, 720p, 20 FPS, 1.5 Mbps, keyframe a cada 2s
+- **Android**: `canPerformGestures="true"` no XML do serviço de acessibilidade — habilita injeção de taps
+- **Backend**: Cache de SPS/PPS (codec config) e último keyframe por sessão
+- **Backend**: Viewers tardios recebem config + keyframe imediatamente ao conectar
+- **Frontend**: `VideoDecoder` (WebCodecs API) para decodificação H.264 nativa
+- **Frontend**: Badge `JPEG` / `H.264` no header do viewer com FPS em tempo real
+- **Frontend**: Fallback automático para JPEG se WebCodecs não disponível (Firefox)
+
+### Fixed
+- **Android**: Taps remotos não funcionavam — `canPerformGestures` faltava na config do `AccessibilityService`
+- **Android**: `dispatchGesture()` falhava silenciosamente sem retorno de erro
+
+### Changed
+- **Android**: Intervalo JPEG reduzido de 500ms para 150ms (~6 FPS no modo fallback)
+- **Android**: JPEG quality reduzido de 50 para 45; bitmap escalado para max 1280px de altura
+- **Android**: `RemoteViewService` agora é foreground service com `mediaProjection|specialUse`
+- **Backend**: Frames binários do device agora são inspecionados (primeiro byte) para cachear keyframes
+
+### Manifest
+- Adicionada permissão `FOREGROUND_SERVICE_MEDIA_PROJECTION`
+- `RemoteViewService`: `foregroundServiceType="mediaProjection|specialUse"`
+- Nova activity: `RemoteAccessActivity` (theme transparente)
+
+---
+
+## [0.16.0] — 2026-05-13 — Remote Screen Access
+
+### Summary
+Primeira versão do acesso remoto: visualização da tela do dispositivo em tempo real com controle via tap, swipe e botões de navegação.
+
+### Components
+- **Android APK**: RemoteViewService + captura via AccessibilityService
+- **Backend**: WebSocket gateway para relay bidirecional
+- **Frontend**: RemoteViewer component com canvas + input handling
+
+### Added
+- **Android**: `RemoteViewService` — captura de tela via `takeScreenshot()` e envio por WebSocket
+- **Android**: Injeção de gestos remotos via `dispatchGesture()` e `performGlobalAction()`
+- **Backend**: `RemoteSessionGateway` — relay WebSocket entre device e viewers
+- **Frontend**: `RemoteViewer` — canvas com renderização via `createImageBitmap`, detecção tap/swipe
+
+### Fixed
+- WebSocket import default resolvia para undefined em produção (trocado para named import)
+- Flicker no viewer por re-render do canvas (trocado para `createImageBitmap`)
+- Instabilidade de conexão WebSocket por dependência instável de `onClose` no useEffect
+
+---
+
 ## [0.15.0] — 2026-05-12 — Production Baseline
 
 ### Summary
