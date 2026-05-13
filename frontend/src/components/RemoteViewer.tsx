@@ -30,13 +30,11 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
 
   // WebSocket connection
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
     const token = localStorage.getItem('accessToken') || ''
-
-    const wsUrl = apiUrl
-      .replace('https://', 'wss://')
-      .replace('http://', 'ws://')
-      .replace('/api/v1', '/remote')
+    // Derive WebSocket URL from page origin — works behind any reverse proxy
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    const wsUrl = protocol + '//' + host + '/remote'
       + `?role=viewer&sessionId=${sessionId}&token=${token}`
 
     const ws = new WebSocket(wsUrl)
