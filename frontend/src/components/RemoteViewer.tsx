@@ -14,10 +14,8 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
   const [connected, setConnected] = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [fps, setFps] = useState(0)
-  const [screenSize, setScreenSize] = useState({ w: 1080, h: 1920 })
   const frameCountRef = useRef(0)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
-  const isDraggingRef = useRef(false)
 
   // FPS counter
   useEffect(() => {
@@ -62,7 +60,6 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
               setDeviceConnected(false)
               break
             case 'device_info':
-              setScreenSize({ w: msg.screenWidth, h: msg.screenHeight })
               break
             case 'session_ended':
               onClose()
@@ -89,22 +86,23 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
   const renderFrame = useCallback((data: ArrayBuffer) => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
+    // Use createImageBitmap for flicker-free rendering
     const blob = new Blob([data], { type: 'image/jpeg' })
-    const url = URL.createObjectURL(blob)
-    const img = new Image()
-    img.onload = () => {
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      // Set canvas size to match image on first frame
-      if (canvas.width !== img.width || canvas.height !== img.height) {
-        canvas.width = img.width
-        canvas.height = img.height
+    createImageBitmap(blob).then((bmp) => {
+      // Set canvas size only once on first frame
+      if (canvas.width !== bmp.width || canvas.height !== bmp.height) {
+        if (!canvas.dataset.sizeSet) {
+          canvas.width = bmp.width
+          canvas.height = bmp.height
+          canvas.dataset.sizeSet = '1'
+        }
       }
-      ctx.drawImage(img, 0, 0)
-      URL.revokeObjectURL(url)
-    }
-    img.src = url
+      ctx.drawImage(bmp, 0, 0)
+      bmp.close()
+    })
   }, [])
 
   // Convert canvas click position to normalized device coordinates (0-1)
@@ -126,40 +124,33 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     const coords = getDeviceCoords(e)
     if (!coords) return
     dragStartRef.current = coords
-    isDraggingRef.current = false
-  }
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (dragStartRef.current) {
-      isDraggingRef.current = true
-    }
   }
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getDeviceCoords(e)
-    if (!coords || !wsRef.current || wsRef.current.readyState !== 1) return
+    const end = getDeviceCoords(e)
+    const start = dragStartRef.current
+    dragStartRef.current = null
+    if (!end || !start || !wsRef.current || wsRef.current.readyState !== 1) return
 
-    if (isDraggingRef.current && dragStartRef.current) {
-      // Swipe
+    // Distance threshold: < 2% of screen = tap, otherwise swipe
+    const dist = Math.hypot(end.x - start.x, end.y - start.y)
+
+    if (dist > 0.02) {
       wsRef.current.send(JSON.stringify({
         type: 'input_swipe',
-        startX: dragStartRef.current.x,
-        startY: dragStartRef.current.y,
-        endX: coords.x,
-        endY: coords.y,
+        startX: start.x,
+        startY: start.y,
+        endX: end.x,
+        endY: end.y,
         duration: 300,
       }))
     } else {
-      // Tap
       wsRef.current.send(JSON.stringify({
         type: 'input_tap',
-        x: coords.x,
-        y: coords.y,
+        x: start.x,
+        y: start.y,
       }))
     }
-
-    dragStartRef.current = null
-    isDraggingRef.current = false
   }
 
   const sendAction = (type: string) => {
@@ -209,7 +200,6 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
             className="max-h-full max-w-full cursor-crosshair"
             style={{ objectFit: 'contain' }}
             onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           />
         )}
