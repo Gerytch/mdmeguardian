@@ -39,23 +39,30 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
 
   async handleConnection(client: WsClient, req: IncomingMessage) {
     try {
+      this.logger.log(`[WS] New connection from ${req.socket.remoteAddress}`);
       const url = new URL(req.url || '', 'http://localhost');
       const role = url.searchParams.get('role') as 'device' | 'viewer';
       const sessionId = url.searchParams.get('sessionId');
       const token = url.searchParams.get('token');
 
+      this.logger.log(`[WS] role=${role} sessionId=${sessionId} token=${token ? token.substring(0, 8) + '...' : 'null'}`);
+
       if (!role || !sessionId || !token) {
+        this.logger.warn('[WS] Missing params — closing 4001');
         client.close(4001, 'Missing params: role, sessionId, token');
         return;
       }
 
       if (role !== 'device' && role !== 'viewer') {
+        this.logger.warn(`[WS] Invalid role "${role}" — closing 4002`);
         client.close(4002, 'Invalid role: must be "device" or "viewer"');
         return;
       }
 
       // Validate session exists and is not closed
+      this.logger.log('[WS] Querying session...');
       const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+      this.logger.log(`[WS] Session found: ${!!session}, status: ${session?.status}`);
       if (!session || session.status === RemoteSessionStatus.CLOSED) {
         client.close(4004, 'Session not found or closed');
         return;
@@ -63,6 +70,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
 
       // Validate token based on role
       if (role === 'device') {
+        this.logger.log(`[WS] Validating device token for deviceId=${session.deviceId}`);
         const device = await this.deviceRepo
           .createQueryBuilder('device')
           .addSelect('device.deviceToken')
@@ -70,7 +78,9 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
           .andWhere('device.id = :deviceId', { deviceId: session.deviceId })
           .getOne();
 
+        this.logger.log(`[WS] Device found: ${!!device}`);
         if (!device) {
+          this.logger.warn('[WS] Invalid device token — closing 4003');
           client.close(4003, 'Invalid device token');
           return;
         }
@@ -122,7 +132,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
         client.isAlive = true;
       });
     } catch (err) {
-      this.logger.error('Connection error', err);
+      this.logger.error(`[WS] Connection error: ${err.message}`, err.stack);
       client.close(4500, 'Internal error');
     }
   }
@@ -158,6 +168,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   private handleMessage(client: WsClient, data: Buffer | string, isBinary: boolean) {
+    this.logger.debug(`[WS] Message from ${client.role}: binary=${isBinary} size=${typeof data === 'string' ? data.length : data.byteLength}`);
     const room = this.sessions.get(client.sessionId);
     if (!room) return;
 
