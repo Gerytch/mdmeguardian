@@ -8,7 +8,7 @@ import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityService
+import android.accessibilityservice.AccessibilityService
 import com.mdm.enterprise.BuildConfig
 import kotlinx.coroutines.*
 import okhttp3.*
