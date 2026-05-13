@@ -20,14 +20,23 @@ interface WsClient extends WS {
   deviceId?: string;
 }
 
+// H.264 frame type markers (first byte of binary messages from device)
+const FRAME_CONFIG = 0x01;  // SPS/PPS
+const FRAME_KEY = 0x02;     // IDR keyframe
+
 @Public()
 @WebSocketGateway({ path: '/remote' })
 export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private logger = new Logger('RemoteSessionGateway');
 
-  // sessionId -> { device: WsClient, viewers: Set<WsClient> }
-  private sessions = new Map<string, { device: WsClient | null; viewers: Set<WsClient> }>();
+  // sessionId -> room (device + viewers + H.264 keyframe cache)
+  private sessions = new Map<string, {
+    device: WsClient | null;
+    viewers: Set<WsClient>;
+    codecConfig: Buffer | null;  // H.264 SPS/PPS for late-joining viewers
+    lastKeyframe: Buffer | null; // Last IDR frame for instant display
+  }>();
 
   constructor(
     @InjectRepository(RemoteSession)
@@ -94,7 +103,12 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
 
       // Initialize session room if needed
       if (!this.sessions.has(sessionId)) {
-        this.sessions.set(sessionId, { device: null, viewers: new Set() });
+        this.sessions.set(sessionId, {
+          device: null,
+          viewers: new Set(),
+          codecConfig: null,
+          lastKeyframe: null,
+        });
       }
       const room = this.sessions.get(sessionId)!;
 
@@ -113,6 +127,13 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
         // If device is already connected, notify the new viewer immediately
         if (room.device) {
           client.send(JSON.stringify({ type: 'device_connected' }));
+        }
+        // Send cached H.264 config + keyframe so late-joining viewer displays instantly
+        if (room.codecConfig) {
+          client.send(room.codecConfig, { binary: true });
+        }
+        if (room.lastKeyframe) {
+          client.send(room.lastKeyframe, { binary: true });
         }
         // Request a fresh frame from the device for the new viewer
         if (room.device && room.device.readyState === WS.OPEN) {
@@ -173,7 +194,19 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
 
     if (client.role === 'device') {
       if (isBinary) {
-        // Binary data = JPEG frame from device screen capture, relay to all viewers
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as unknown as ArrayBuffer);
+
+        // Cache H.264 config and keyframes for late-joining viewers
+        if (buf.length > 0) {
+          const frameType = buf[0];
+          if (frameType === FRAME_CONFIG) {
+            room.codecConfig = buf;
+          } else if (frameType === FRAME_KEY) {
+            room.lastKeyframe = buf;
+          }
+        }
+
+        // Relay binary frame to all viewers
         for (const viewer of room.viewers) {
           if (viewer.readyState === WS.OPEN) {
             viewer.send(data, { binary: true });

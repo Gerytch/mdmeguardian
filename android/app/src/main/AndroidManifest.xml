@@ -15,6 +15,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
@@ -182,10 +183,20 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
-        <!-- Remote View Service for real-time screen sharing via WebSocket -->
+        <!-- Remote View Service for real-time screen sharing via WebSocket.
+             mediaProjection type enables H.264 streaming via MediaCodec;
+             specialUse keeps the service alive while waiting for projection approval. -->
         <service
             android:name=".services.RemoteViewService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|specialUse" />
+
+        <!-- Transparent activity for MediaProjection permission dialog -->
+        <activity
+            android:name=".ui.RemoteAccessActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleTop" />
 
         <!-- File Provider for APK installs -->
         <provider

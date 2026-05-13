@@ -42,7 +42,7 @@ class MdmAccessibilityService : AccessibilityService() {
         }
 
         /** Fast JPEG capture for remote streaming — no file I/O */
-        suspend fun captureToJpegBytes(quality: Int = 60): ByteArray? {
+        suspend fun captureToJpegBytes(quality: Int = 60, maxHeight: Int = 0): ByteArray? {
             val svc = instance ?: run {
                 Log.w(TAG, "Accessibility service not running")
                 return null
@@ -51,7 +51,7 @@ class MdmAccessibilityService : AccessibilityService() {
                 Log.w(TAG, "takeScreenshot requires API 30+")
                 return null
             }
-            return svc.doCaptureJpeg(quality)
+            return svc.doCaptureJpeg(quality, maxHeight)
         }
 
         /** Dispatch a tap at absolute screen coordinates */
@@ -140,7 +140,7 @@ class MdmAccessibilityService : AccessibilityService() {
         }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private suspend fun doCaptureJpeg(quality: Int): ByteArray? =
+    private suspend fun doCaptureJpeg(quality: Int, maxHeight: Int = 0): ByteArray? =
         suspendCancellableCoroutine { cont ->
             takeScreenshot(
                 android.view.Display.DEFAULT_DISPLAY,
@@ -148,10 +148,19 @@ class MdmAccessibilityService : AccessibilityService() {
                 object : TakeScreenshotCallback {
                     override fun onSuccess(result: ScreenshotResult) {
                         val hw = result.hardwareBuffer
-                        val bmp = Bitmap.wrapHardwareBuffer(hw, null)
+                        var bmp = Bitmap.wrapHardwareBuffer(hw, null)
                             ?.copy(Bitmap.Config.ARGB_8888, false)
                         hw.close()
                         if (bmp == null) { cont.resume(null); return }
+
+                        // Scale down for bandwidth savings
+                        if (maxHeight > 0 && bmp.height > maxHeight) {
+                            val scale = maxHeight.toFloat() / bmp.height
+                            val newW = (bmp.width * scale).toInt()
+                            val scaled = Bitmap.createScaledBitmap(bmp, newW, maxHeight, true)
+                            bmp.recycle()
+                            bmp = scaled
+                        }
 
                         val baos = ByteArrayOutputStream()
                         bmp.compress(Bitmap.CompressFormat.JPEG, quality, baos)

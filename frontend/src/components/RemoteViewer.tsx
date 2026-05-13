@@ -8,6 +8,11 @@ interface RemoteViewerProps {
   onClose: () => void
 }
 
+// H.264 frame type markers (must match backend/device constants)
+const FRAME_CONFIG = 0x01
+const FRAME_KEY = 0x02
+const FRAME_DELTA = 0x03
+
 export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -16,8 +21,15 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
   const [connected, setConnected] = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [fps, setFps] = useState(0)
+  const [streamMode, setStreamMode] = useState<'jpeg' | 'h264'>('jpeg')
   const frameCountRef = useRef(0)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+
+  // H.264 decoder refs
+  const decoderRef = useRef<VideoDecoder | null>(null)
+  const codecConfigRef = useRef<Uint8Array | null>(null)
+  const decoderReady = useRef(false)
+  const timestampRef = useRef(0)
 
   // FPS counter
   useEffect(() => {
@@ -28,30 +40,127 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     return () => clearInterval(iv)
   }, [])
 
-  // WebSocket connection
+  // -- JPEG rendering ---------------------------------------------------
+  const renderJpegFrame = useCallback((data: ArrayBuffer) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const blob = new Blob([data], { type: 'image/jpeg' })
+    createImageBitmap(blob).then((bmp) => {
+      if (!canvas.dataset.sizeSet) {
+        canvas.width = bmp.width
+        canvas.height = bmp.height
+        canvas.dataset.sizeSet = '1'
+      }
+      ctx.drawImage(bmp, 0, 0)
+      bmp.close()
+    })
+  }, [])
+
+  // -- H.264 decoder setup ----------------------------------------------
+  const initH264Decoder = useCallback((width: number, height: number) => {
+    if (typeof VideoDecoder === 'undefined') {
+      console.warn('WebCodecs not available — staying in JPEG mode')
+      return
+    }
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    canvas.width = width
+    canvas.height = height
+    canvas.dataset.sizeSet = '1'
+
+    const decoder = new VideoDecoder({
+      output: (frame: VideoFrame) => {
+        ctx.drawImage(frame, 0, 0)
+        frame.close()
+        frameCountRef.current++
+      },
+      error: (e: DOMException) => {
+        console.error('VideoDecoder error:', e)
+      },
+    })
+
+    decoderRef.current = decoder
+    decoderReady.current = false
+    timestampRef.current = 0
+  }, [])
+
+  const configureDecoder = useCallback((configData: Uint8Array) => {
+    const decoder = decoderRef.current
+    if (!decoder) return
+    codecConfigRef.current = configData
+
+    decoder.configure({
+      codec: 'avc1.42E01F',
+      description: configData,
+    })
+    decoderReady.current = true
+  }, [])
+
+  const decodeH264Frame = useCallback((frameData: Uint8Array, isKey: boolean) => {
+    const decoder = decoderRef.current
+    if (!decoder || !decoderReady.current) return
+    if (decoder.state !== 'configured') return
+
+    const chunk = new EncodedVideoChunk({
+      type: isKey ? 'key' : 'delta',
+      timestamp: timestampRef.current,
+      data: frameData,
+    })
+    timestampRef.current += 50_000
+    decoder.decode(chunk)
+  }, [])
+
+  // -- WebSocket connection ---------------------------------------------
   useEffect(() => {
     const token = localStorage.getItem('accessToken') || ''
-    // Derive WebSocket URL from page origin — works behind any reverse proxy
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    const wsUrl = protocol + '//' + host + '/remote'
-      + `?role=viewer&sessionId=${sessionId}&token=${token}`
+    const wsUrl = `${protocol}//${host}/remote?role=viewer&sessionId=${sessionId}&token=${token}`
 
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
 
-    ws.onopen = () => {
-      setConnected(true)
-    }
+    ws.onopen = () => setConnected(true)
 
     ws.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
-        // Binary = JPEG frame
-        renderFrame(event.data)
-        frameCountRef.current++
+        const bytes = new Uint8Array(event.data)
+        if (bytes.length === 0) return
+
+        if (decoderRef.current && decoderReady.current) {
+          // H.264 mode
+          const frameType = bytes[0]
+          const payload = bytes.subarray(1)
+
+          if (frameType === FRAME_CONFIG) {
+            configureDecoder(payload)
+          } else if (frameType === FRAME_KEY) {
+            decodeH264Frame(payload, true)
+          } else if (frameType === FRAME_DELTA) {
+            decodeH264Frame(payload, false)
+          }
+        } else if (decoderRef.current && !decoderReady.current) {
+          // Decoder initialised but waiting for config
+          const frameType = bytes[0]
+          if (frameType === FRAME_CONFIG) {
+            configureDecoder(bytes.subarray(1))
+          } else if (frameType === FRAME_KEY && codecConfigRef.current) {
+            decodeH264Frame(bytes.subarray(1), true)
+          }
+        } else {
+          // JPEG mode
+          renderJpegFrame(event.data)
+          frameCountRef.current++
+        }
       } else {
-        // Text = JSON control message
         try {
           const msg = JSON.parse(event.data)
           switch (msg.type) {
@@ -63,11 +172,17 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
               break
             case 'device_info':
               break
+            case 'stream_upgrade':
+              if (msg.codec === 'h264') {
+                setStreamMode('h264')
+                initH264Decoder(msg.width || 720, msg.height || 1280)
+              }
+              break
             case 'session_ended':
               onCloseRef.current()
               break
           }
-        } catch {}
+        } catch { /* ignore malformed messages */ }
       }
     }
 
@@ -76,39 +191,19 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
       setDeviceConnected(false)
     }
 
-    ws.onerror = () => {
-      setConnected(false)
-    }
+    ws.onerror = () => setConnected(false)
 
     return () => {
       ws.close()
+      if (decoderRef.current && decoderRef.current.state !== 'closed') {
+        decoderRef.current.close()
+        decoderRef.current = null
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
-  const renderFrame = useCallback((data: ArrayBuffer) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Use createImageBitmap for flicker-free rendering
-    const blob = new Blob([data], { type: 'image/jpeg' })
-    createImageBitmap(blob).then((bmp) => {
-      // Set canvas size only once on first frame
-      if (canvas.width !== bmp.width || canvas.height !== bmp.height) {
-        if (!canvas.dataset.sizeSet) {
-          canvas.width = bmp.width
-          canvas.height = bmp.height
-          canvas.dataset.sizeSet = '1'
-        }
-      }
-      ctx.drawImage(bmp, 0, 0)
-      bmp.close()
-    })
-  }, [])
-
-  // Convert canvas click position to normalized device coordinates (0-1)
+  // -- Input handling ---------------------------------------------------
   const getDeviceCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return null
@@ -135,7 +230,6 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     dragStartRef.current = null
     if (!end || !start || !wsRef.current || wsRef.current.readyState !== 1) return
 
-    // Distance threshold: < 2% of screen = tap, otherwise swipe
     const dist = Math.hypot(end.x - start.x, end.y - start.y)
 
     if (dist > 0.02) {
@@ -167,7 +261,7 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-white">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold">Acesso Remoto — {deviceName}</h2>
+          <h2 className="text-sm font-semibold">Acesso Remoto &mdash; {deviceName}</h2>
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
             deviceConnected ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'
           }`}>
@@ -176,7 +270,16 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-400">{fps} FPS</span>
+          <span className="text-xs text-gray-400">
+            {fps} FPS{' '}
+            <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              streamMode === 'h264'
+                ? 'bg-green-900/50 text-green-400'
+                : 'bg-gray-700 text-gray-400'
+            }`}>
+              {streamMode === 'h264' ? 'H.264' : 'JPEG'}
+            </span>
+          </span>
           <button
             onClick={() => {
               wsRef.current?.close()
@@ -194,8 +297,8 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
         {!deviceConnected ? (
           <div className="text-center text-gray-400">
             <div className="animate-spin w-8 h-8 border-2 border-gray-600 border-t-white rounded-full mx-auto mb-3" />
-            <p className="text-sm">Aguardando conexão do dispositivo...</p>
-            <p className="text-xs text-gray-500 mt-1">O dispositivo será conectado em até 5 segundos</p>
+            <p className="text-sm">Aguardando conexao do dispositivo...</p>
+            <p className="text-xs text-gray-500 mt-1">O dispositivo sera conectado em ate 5 segundos</p>
           </div>
         ) : (
           <canvas
