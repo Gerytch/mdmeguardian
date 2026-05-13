@@ -11,6 +11,8 @@ interface RemoteViewerProps {
 export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   const [connected, setConnected] = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [fps, setFps] = useState(0)
@@ -62,7 +64,7 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
             case 'device_info':
               break
             case 'session_ended':
-              onClose()
+              onCloseRef.current()
               break
           }
         } catch {}
@@ -81,7 +83,8 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     return () => {
       ws.close()
     }
-  }, [sessionId, onClose])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
 
   const renderFrame = useCallback((data: ArrayBuffer) => {
     const canvas = canvasRef.current
