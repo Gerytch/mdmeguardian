@@ -146,3 +146,12 @@ export const usersApi = {
   changePassword: (tenantId: string, userId: string, currentPassword: string, newPassword: string) =>
     api.patch(`/tenants/${tenantId}/users/${userId}/change-password`, { currentPassword, newPassword }),
 }
+
+export const remoteSessionsApi = {
+  create: (tenantId: string, deviceId: string) =>
+    api.post(`/tenants/${tenantId}/remote-sessions`, { deviceId }),
+  get: (tenantId: string, id: string) =>
+    api.get(`/tenants/${tenantId}/remote-sessions/${id}`),
+  close: (tenantId: string, id: string) =>
+    api.delete(`/tenants/${tenantId}/remote-sessions/${id}`),
+}

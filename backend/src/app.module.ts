@@ -19,6 +19,7 @@ import { DeviceUsersModule } from './modules/device-users/device-users.module';
 import { DeviceSessionsModule } from './modules/device-sessions/device-sessions.module';
 import { DeviceUserAuthModule } from './modules/device-user-auth/device-user-auth.module';
 import { DeviceGroupsModule } from './modules/device-groups/device-groups.module';
+import { RemoteSessionModule } from './modules/remote-sessions/remote-session.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { DeviceGroupsModule } from './modules/device-groups/device-groups.module
     DeviceSessionsModule,
     DeviceUserAuthModule,
     DeviceGroupsModule,
+    RemoteSessionModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

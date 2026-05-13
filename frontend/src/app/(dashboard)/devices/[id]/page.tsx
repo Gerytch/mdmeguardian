@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { devicesApi } from '@/lib/api'
+import { devicesApi, remoteSessionsApi } from '@/lib/api'
+import RemoteViewer from '@/components/RemoteViewer'
 import { getTenantId } from '@/lib/auth'
 import { Device, Command } from '@/types'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -94,6 +95,11 @@ export default function DeviceDetailPage() {
   const [selectedApps, setSelectedApps]   = useState<Set<string>>(new Set())
   const [appSearch, setAppSearch]         = useState('')
   const [fetchingApps, setFetchingApps]   = useState(false)
+
+  // Remote Viewer state
+  const [remoteSessionId, setRemoteSessionId] = useState<string | null>(null)
+  const [showRemoteViewer, setShowRemoteViewer] = useState(false)
+  const [startingRemote, setStartingRemote] = useState(false)
 
   const tenantId = getTenantId()
 
@@ -270,6 +276,30 @@ export default function DeviceDetailPage() {
   const handleEnableKiosk = async () => {
     await sendCmd('ENABLE_KIOSK', { apps: Array.from(selectedApps), mode: kioskMode })
     setShowKiosk(false)
+  }
+
+  const startRemoteView = async () => {
+    if (!device || startingRemote) return
+    setStartingRemote(true)
+    try {
+      const res = await remoteSessionsApi.create(tenantId, device.id)
+      setRemoteSessionId(res.data.id)
+      setShowRemoteViewer(true)
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Erro ao iniciar acesso remoto' })
+    } finally {
+      setStartingRemote(false)
+    }
+  }
+
+  const stopRemoteView = async () => {
+    if (remoteSessionId) {
+      try {
+        await remoteSessionsApi.close(tenantId, remoteSessionId)
+      } catch {}
+    }
+    setShowRemoteViewer(false)
+    setRemoteSessionId(null)
   }
 
   const runNetworkTest = async () => {
@@ -643,6 +673,20 @@ export default function DeviceDetailPage() {
                   <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
+                </button>
+                <button
+                  onClick={startRemoteView}
+                  disabled={!!sending || !device?.isOnline || startingRemote}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-purple-200 text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2">🖥️ Acesso Remoto</span>
+                  {startingRemote ? (
+                    <span className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -1278,6 +1322,14 @@ export default function DeviceDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showRemoteViewer && remoteSessionId && (
+        <RemoteViewer
+          sessionId={remoteSessionId}
+          deviceName={device?.name || 'Device'}
+          onClose={stopRemoteView}
+        />
       )}
     </div>
   )

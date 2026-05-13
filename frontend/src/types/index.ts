@@ -45,7 +45,7 @@ export interface Command {
   id: string
   tenantId: string
   deviceId: string
-  type: 'LOCK' | 'UNLOCK' | 'WIPE' | 'REBOOT' | 'INSTALL_APP' | 'UNINSTALL_APP' | 'UPDATE_POLICY' | 'ENABLE_KIOSK' | 'DISABLE_KIOSK' | 'LOCATE' | 'UPDATE_AGENT' | 'ADMIN_LOCK' | 'ADMIN_UNLOCK' | 'NETWORK_TEST' | 'UNINSTALL_AGENT'
+  type: 'LOCK' | 'UNLOCK' | 'WIPE' | 'REBOOT' | 'INSTALL_APP' | 'UNINSTALL_APP' | 'UPDATE_POLICY' | 'ENABLE_KIOSK' | 'DISABLE_KIOSK' | 'LOCATE' | 'UPDATE_AGENT' | 'ADMIN_LOCK' | 'ADMIN_UNLOCK' | 'NETWORK_TEST' | 'UNINSTALL_AGENT' | 'REMOTE_VIEW_START' | 'REMOTE_VIEW_STOP'
   payload: Record<string, any>
   status: 'PENDING' | 'SENT' | 'EXECUTING' | 'EXECUTED' | 'FAILED'
   createdBy: string
@@ -104,4 +104,15 @@ export interface AuthTokens {
   expiresIn: number
   tokenType: string
   user: User
+}
+
+export interface RemoteSession {
+  id: string
+  tenantId: string
+  deviceId: string
+  initiatedBy: string
+  status: 'PENDING' | 'ACTIVE' | 'CLOSED'
+  createdAt: string
+  startedAt: string | null
+  endedAt: string | null
 }

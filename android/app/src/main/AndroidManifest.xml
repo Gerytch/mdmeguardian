@@ -182,6 +182,11 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
+        <!-- Remote View Service for real-time screen sharing via WebSocket -->
+        <service
+            android:name=".services.RemoteViewService"
+            android:exported="false" />
+
         <!-- File Provider for APK installs -->
         <provider
             android:name="androidx.core.content.FileProvider"

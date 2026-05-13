@@ -630,6 +630,23 @@ class CommandPollingService : Service() {
                         Log.i(TAG, "UNINSTALL_AGENT: device owner cleared, uninstall triggered")
                     }
 
+                    "REMOTE_VIEW_START" -> {
+                        val sessionId = command.payload?.get("sessionId")?.toString() ?: ""
+                        if (sessionId.isNotEmpty()) {
+                            val serverUrl = prefs.getStr("server_url") ?: com.mdm.enterprise.BuildConfig.API_BASE_URL
+                            RemoteViewService.start(this@CommandPollingService, sessionId, serverUrl, deviceToken)
+                            result["message"] = "Remote view started"
+                        } else {
+                            success = false
+                            errorMessage = "Missing sessionId in payload"
+                        }
+                    }
+
+                    "REMOTE_VIEW_STOP" -> {
+                        RemoteViewService.stop(this@CommandPollingService)
+                        result["message"] = "Remote view stopped"
+                    }
+
                     else -> {
                         Log.w(TAG, "Unknown command type: ${command.type}")
                         result["warning"] = "Unknown command type"

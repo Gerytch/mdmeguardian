@@ -25,10 +25,12 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/platform-ws": "^10.4.22",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/swagger": "^7.3.0",
     "@nestjs/throttler": "^5.1.2",
     "@nestjs/typeorm": "^10.0.2",
+    "@nestjs/websockets": "^10.4.22",
     "@types/unzipper": "^0.10.11",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
@@ -44,7 +46,8 @@
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.20",
     "unzipper": "^0.12.3",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.2",
@@ -58,6 +61,7 @@
     "@types/node": "^20.12.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^7.7.1",
     "@typescript-eslint/parser": "^7.7.1",
     "eslint": "^8.57.0",
