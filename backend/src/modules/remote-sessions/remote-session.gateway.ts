@@ -167,7 +167,7 @@ export class RemoteSessionGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   private handleMessage(client: WsClient, data: Buffer | string, isBinary: boolean) {
-    this.logger.debug(`[WS] Message from ${client.role}: binary=${isBinary} size=${typeof data === 'string' ? data.length : data.byteLength}`);
+    this.logger.log(`[WS] Message from ${client.role}: binary=${isBinary} size=${typeof data === 'string' ? data.length : data.byteLength}`);
     const room = this.sessions.get(client.sessionId);
     if (!room) return;
 
