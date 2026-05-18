@@ -23,7 +23,7 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '0.17.1',
+    version: '0.17.2',
     date: '2026-05-18',
     title: 'Correção do Acesso Remoto — Tela Congelada após Permissão',
     type: 'Sistema + APK',
