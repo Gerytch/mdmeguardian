@@ -28,9 +28,10 @@ export const releaseNotes: ReleaseNote[] = [
     title: 'Correção do Acesso Remoto — Tela Congelada após Permissão',
     type: 'Sistema + APK',
     systemItems: [
-      'Corrigido: Tela do acesso remoto congelava após aprovar permissão de gravação — race condition na transição JPEG → H.264',
+      'Corrigido: Tela do acesso remoto congelava após aprovar permissão de gravação — decoder H.264 não recebia dados no formato correto',
+      'Corrigido: Conversão Annex B → AVC — MediaCodec emite start codes, WebCodecs espera length-prefixed NALUs + AVCDecoderConfigurationRecord',
+      'Melhoria: Codec string derivado automaticamente do SPS do encoder (suporta Baseline, Main e High profile)',
       'Melhoria: Frontend cacheia config H.264 que chega antes do decoder estar pronto (safety net para chipsets rápidos)',
-      'Melhoria: Viewer solicita keyframe automaticamente ao iniciar modo H.264',
     ],
     apkItems: [
       'Corrigido: Notificação de stream_upgrade agora é enviada antes de iniciar a produção de frames — garante que o viewer está pronto',
