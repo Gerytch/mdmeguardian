@@ -332,7 +332,20 @@ class RemoteViewService : Service() {
         val inputSurface = encoder!!.createInputSurface()
         encoder!!.start()
 
-        // Virtual display feeds frames into the encoder surface
+        isH264Mode = true
+
+        // Notify viewers BEFORE creating virtual display — the virtual display triggers
+        // frame production on the encoder, so the viewer must have its decoder ready first.
+        // Without this ordering, FRAME_CONFIG arrives before stream_upgrade and the frontend
+        // treats it as JPEG (fails silently) → decoder never gets configured → screen freezes.
+        webSocket?.send(JSONObject().apply {
+            put("type", "stream_upgrade")
+            put("codec", "h264")
+            put("width", encoderWidth)
+            put("height", encoderHeight)
+        }.toString())
+
+        // NOW create virtual display — frames start flowing into the encoder
         virtualDisplay = mediaProjection!!.createVirtualDisplay(
             "RemoteStream",
             encoderWidth, encoderHeight,
@@ -341,16 +354,7 @@ class RemoteViewService : Service() {
             inputSurface, null, null
         )
 
-        isH264Mode = true
         Log.i(TAG, "H.264 streaming started (${encoderWidth}x${encoderHeight} @ ${H264_FPS}fps)")
-
-        // Notify viewers to switch decoder
-        webSocket?.send(JSONObject().apply {
-            put("type", "stream_upgrade")
-            put("codec", "h264")
-            put("width", encoderWidth)
-            put("height", encoderHeight)
-        }.toString())
     }
 
     // ── Notification (required for foreground service) ──────────────────

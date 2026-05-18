@@ -30,6 +30,8 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
   const codecConfigRef = useRef<Uint8Array | null>(null)
   const decoderReady = useRef(false)
   const timestampRef = useRef(0)
+  // Cache for H.264 config that arrives before stream_upgrade (race condition safety net)
+  const pendingConfigRef = useRef<Uint8Array | null>(null)
 
   // FPS counter
   useEffect(() => {
@@ -156,6 +158,16 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
             decodeH264Frame(bytes.subarray(1), true)
           }
         } else {
+          // No decoder yet — check if this is an early H.264 frame (race condition:
+          // encoder may emit config before stream_upgrade arrives on some chipsets)
+          const firstByte = bytes[0]
+          if (firstByte === FRAME_CONFIG) {
+            pendingConfigRef.current = bytes.subarray(1)
+            return
+          }
+          if (firstByte === FRAME_KEY || firstByte === FRAME_DELTA) {
+            return // drop H.264 frame — decoder not ready yet
+          }
           // JPEG mode
           renderJpegFrame(event.data)
           frameCountRef.current++
@@ -176,6 +188,15 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
               if (msg.codec === 'h264') {
                 setStreamMode('h264')
                 initH264Decoder(msg.width || 720, msg.height || 1280)
+                // Apply config that arrived before stream_upgrade (race condition)
+                if (pendingConfigRef.current) {
+                  configureDecoder(pendingConfigRef.current)
+                  pendingConfigRef.current = null
+                }
+                // Request fresh keyframe so decoder has content to display
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'request_frame' }))
+                }
               }
               break
             case 'session_ended':

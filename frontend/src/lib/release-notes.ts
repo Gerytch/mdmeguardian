@@ -23,6 +23,20 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.17.1',
+    date: '2026-05-18',
+    title: 'Correção do Acesso Remoto — Tela Congelada após Permissão',
+    type: 'Sistema + APK',
+    systemItems: [
+      'Corrigido: Tela do acesso remoto congelava após aprovar permissão de gravação — race condition na transição JPEG → H.264',
+      'Melhoria: Frontend cacheia config H.264 que chega antes do decoder estar pronto (safety net para chipsets rápidos)',
+      'Melhoria: Viewer solicita keyframe automaticamente ao iniciar modo H.264',
+    ],
+    apkItems: [
+      'Corrigido: Notificação de stream_upgrade agora é enviada antes de iniciar a produção de frames — garante que o viewer está pronto',
+    ],
+  },
+  {
     version: '0.17.0',
     date: '2026-05-13',
     title: 'Acesso Remoto — Streaming H.264 em Tempo Real',
