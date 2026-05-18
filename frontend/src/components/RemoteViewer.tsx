@@ -13,6 +13,91 @@ const FRAME_CONFIG = 0x01
 const FRAME_KEY = 0x02
 const FRAME_DELTA = 0x03
 
+// ── Annex B → AVC format conversion ────────────────────────────────────
+// MediaCodec outputs Annex B (start codes 00 00 00 01 between NALUs).
+// WebCodecs VideoDecoder with avc1.* expects AVCDecoderConfigurationRecord
+// as description and length-prefixed NALUs in frame data.
+
+/** Split Annex B byte stream into individual NAL units */
+function parseAnnexBNALUs(data: Uint8Array): Uint8Array[] {
+  const nalus: Uint8Array[] = []
+  let i = 0
+  while (i < data.length) {
+    // Find start code (00 00 00 01 or 00 00 01)
+    let scLen = 0
+    if (i + 3 < data.length && data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1) {
+      scLen = 4
+    } else if (i + 2 < data.length && data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1) {
+      scLen = 3
+    }
+    if (scLen === 0) { i++; continue }
+
+    const naluStart = i + scLen
+    // Scan for next start code
+    let naluEnd = data.length
+    for (let j = naluStart; j < data.length - 2; j++) {
+      if (data[j] === 0 && data[j + 1] === 0 && (data[j + 2] === 1 || (data[j + 2] === 0 && j + 3 < data.length && data[j + 3] === 1))) {
+        naluEnd = j
+        break
+      }
+    }
+    if (naluEnd > naluStart) {
+      nalus.push(data.subarray(naluStart, naluEnd))
+    }
+    i = naluEnd
+  }
+  return nalus
+}
+
+/** Build AVCDecoderConfigurationRecord from SPS + PPS NAL units */
+function buildAVCConfigRecord(sps: Uint8Array, pps: Uint8Array): Uint8Array {
+  const len = 11 + sps.length + pps.length
+  const r = new Uint8Array(len)
+  r[0] = 1              // configurationVersion
+  r[1] = sps[1]         // AVCProfileIndication
+  r[2] = sps[2]         // profile_compatibility
+  r[3] = sps[3]         // AVCLevelIndication
+  r[4] = 0xFF           // lengthSizeMinusOne = 3 → 4-byte lengths
+  r[5] = 0xE1           // numOfSPS = 1
+  r[6] = (sps.length >> 8) & 0xFF
+  r[7] = sps.length & 0xFF
+  r.set(sps, 8)
+  const o = 8 + sps.length
+  r[o] = 1              // numOfPPS
+  r[o + 1] = (pps.length >> 8) & 0xFF
+  r[o + 2] = pps.length & 0xFF
+  r.set(pps, o + 3)
+  return r
+}
+
+/** Build codec string from SPS (e.g. "avc1.64001F") */
+function codecStringFromSPS(sps: Uint8Array): string {
+  const profile = sps[1].toString(16).padStart(2, '0')
+  const compat = sps[2].toString(16).padStart(2, '0')
+  const level = sps[3].toString(16).padStart(2, '0')
+  return `avc1.${profile}${compat}${level}`
+}
+
+/** Convert Annex B frame data to AVC format (4-byte length-prefixed NALUs) */
+function annexBToAVC(data: Uint8Array): Uint8Array {
+  const nalus = parseAnnexBNALUs(data)
+  let total = 0
+  for (const n of nalus) total += 4 + n.length
+  const out = new Uint8Array(total)
+  let off = 0
+  for (const n of nalus) {
+    out[off]     = (n.length >> 24) & 0xFF
+    out[off + 1] = (n.length >> 16) & 0xFF
+    out[off + 2] = (n.length >> 8) & 0xFF
+    out[off + 3] = n.length & 0xFF
+    out.set(n, off + 4)
+    off += 4 + n.length
+  }
+  return out
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
 export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -93,27 +178,46 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     timestampRef.current = 0
   }, [])
 
-  const configureDecoder = useCallback((configData: Uint8Array) => {
+  const configureDecoder = useCallback((annexBConfig: Uint8Array) => {
     const decoder = decoderRef.current
     if (!decoder) return
-    codecConfigRef.current = configData
 
-    decoder.configure({
-      codec: 'avc1.42E01F',
-      description: configData,
-    })
-    decoderReady.current = true
+    // Parse Annex B config → extract SPS & PPS NAL units
+    const nalus = parseAnnexBNALUs(annexBConfig)
+    const sps = nalus.find(n => (n[0] & 0x1F) === 7)  // NAL type 7 = SPS
+    const pps = nalus.find(n => (n[0] & 0x1F) === 8)  // NAL type 8 = PPS
+    if (!sps || !pps) {
+      console.error('H.264 config missing SPS or PPS')
+      return
+    }
+
+    // Build proper AVCDecoderConfigurationRecord & derive codec string from SPS
+    const avcC = buildAVCConfigRecord(sps, pps)
+    const codec = codecStringFromSPS(sps)
+    console.log(`H.264 decoder: codec=${codec}, SPS=${sps.length}B, PPS=${pps.length}B`)
+
+    codecConfigRef.current = annexBConfig
+
+    try {
+      decoder.configure({ codec, description: avcC })
+      decoderReady.current = true
+    } catch (e) {
+      console.error('VideoDecoder configure failed:', e)
+    }
   }, [])
 
-  const decodeH264Frame = useCallback((frameData: Uint8Array, isKey: boolean) => {
+  const decodeH264Frame = useCallback((annexBFrame: Uint8Array, isKey: boolean) => {
     const decoder = decoderRef.current
     if (!decoder || !decoderReady.current) return
     if (decoder.state !== 'configured') return
 
+    // Convert Annex B → length-prefixed AVC format
+    const avcData = annexBToAVC(annexBFrame)
+
     const chunk = new EncodedVideoChunk({
       type: isKey ? 'key' : 'delta',
       timestamp: timestampRef.current,
-      data: frameData,
+      data: avcData,
     })
     timestampRef.current += 50_000
     decoder.decode(chunk)
