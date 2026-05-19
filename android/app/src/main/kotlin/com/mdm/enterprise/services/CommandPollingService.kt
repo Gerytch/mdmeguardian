@@ -631,6 +631,14 @@ class CommandPollingService : Service() {
                     }
 
                     "REMOTE_VIEW_START" -> {
+                        // Wake the screen so AccessibilityService / MediaProjection can capture
+                        val screenWl = pm.newWakeLock(
+                            android.os.PowerManager.FULL_WAKE_LOCK or
+                            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                            android.os.PowerManager.ON_AFTER_RELEASE,
+                            "MDM:remoteViewWake"
+                        )
+                        screenWl.acquire(10_000L)
                         val sessionId = command.payload?.get("sessionId")?.toString() ?: ""
                         if (sessionId.isNotEmpty()) {
                             val serverUrl = prefs.getStr("server_url") ?: com.mdm.enterprise.BuildConfig.API_BASE_URL
@@ -640,6 +648,7 @@ class CommandPollingService : Service() {
                             success = false
                             errorMessage = "Missing sessionId in payload"
                         }
+                        if (screenWl.isHeld) screenWl.release()
                     }
 
                     "REMOTE_VIEW_STOP" -> {

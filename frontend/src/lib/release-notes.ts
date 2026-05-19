@@ -23,6 +23,15 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.18.2',
+    date: '2026-05-18',
+    title: 'Acesso Remoto — Funciona com Tela Desligada',
+    type: 'APK',
+    apkItems: [
+      'Corrigido: Acesso remoto ficava em loading infinito se a tela do celular estivesse desligada — agora liga a tela automaticamente antes de iniciar a captura',
+    ],
+  },
+  {
     version: '0.18.1',
     date: '2026-05-18',
     title: 'Correção — Sessão Remota não Fechava com Celular Bloqueado',
