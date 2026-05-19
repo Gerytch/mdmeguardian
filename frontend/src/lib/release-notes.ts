@@ -23,6 +23,16 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.18.1',
+    date: '2026-05-18',
+    title: 'Correção — Sessão Remota não Fechava com Celular Bloqueado',
+    type: 'Sistema',
+    systemItems: [
+      'Corrigido: Fechar sessão remota agora é idempotente — não falha se sessão já foi fechada pelo gateway',
+      'Corrigido: Sessões ACTIVE orfãs (device desconectou) são auto-fechadas após 5 minutos',
+    ],
+  },
+  {
     version: '0.18.0',
     date: '2026-05-18',
     title: 'Acesso Remoto — Sessao Gerenciada + Tela Cheia',

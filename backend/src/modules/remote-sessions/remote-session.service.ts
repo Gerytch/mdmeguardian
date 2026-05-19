@@ -7,13 +7,15 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 import { RemoteSession, RemoteSessionStatus } from './remote-session.entity';
 import { Command, CommandStatus, CommandType } from '../commands/entities/command.entity';
 import { Device } from '../devices/entities/device.entity';
 
 /** Auto-close PENDING sessions after 30 seconds */
 const PENDING_TIMEOUT_MS = 30_000;
+/** Auto-close ACTIVE sessions after 5 minutes with no WebSocket activity */
+const ACTIVE_TIMEOUT_MS = 5 * 60_000;
 /** Cleanup interval runs every 15 seconds */
 const CLEANUP_INTERVAL_MS = 15_000;
 
@@ -41,21 +43,26 @@ export class RemoteSessionService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Auto-close PENDING sessions that exceeded timeout (device never connected).
+   * Auto-close stale sessions:
+   * - PENDING older than 30s (device never connected)
+   * - ACTIVE older than 5min without updates (orphaned)
    */
   private async cleanupStaleSessions() {
-    const cutoff = new Date(Date.now() - PENDING_TIMEOUT_MS);
+    const pendingCutoff = new Date(Date.now() - PENDING_TIMEOUT_MS);
+    const activeCutoff = new Date(Date.now() - ACTIVE_TIMEOUT_MS);
+
     const stale = await this.sessionRepo.find({
-      where: {
-        status: RemoteSessionStatus.PENDING,
-        createdAt: LessThan(cutoff),
-      },
+      where: [
+        { status: RemoteSessionStatus.PENDING, createdAt: LessThan(pendingCutoff) },
+        { status: RemoteSessionStatus.ACTIVE, startedAt: LessThan(activeCutoff) },
+      ],
     });
+
     for (const session of stale) {
       session.status = RemoteSessionStatus.CLOSED;
       session.endedAt = new Date();
       await this.sessionRepo.save(session);
-      this.logger.warn(`Auto-closed stale PENDING session ${session.id} (created ${session.createdAt.toISOString()})`);
+      this.logger.warn(`Auto-closed stale ${session.status} session ${session.id}`);
     }
   }
 
@@ -75,23 +82,16 @@ export class RemoteSessionService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Device is offline');
     }
 
-    // Check for existing active session on this device
+    // Check for existing active/pending session on this device
     const existing = await this.sessionRepo.findOne({
-      where: { tenantId, deviceId, status: RemoteSessionStatus.ACTIVE },
+      where: [
+        { tenantId, deviceId, status: RemoteSessionStatus.ACTIVE },
+        { tenantId, deviceId, status: RemoteSessionStatus.PENDING },
+      ],
     });
     if (existing) {
       throw new BadRequestException(
         `Device already has an active remote session: ${existing.id}`,
-      );
-    }
-
-    // Also check for pending sessions (device hasn't connected yet)
-    const pending = await this.sessionRepo.findOne({
-      where: { tenantId, deviceId, status: RemoteSessionStatus.PENDING },
-    });
-    if (pending) {
-      throw new BadRequestException(
-        `Device already has a pending remote session: ${pending.id}`,
       );
     }
 
@@ -146,12 +146,14 @@ export class RemoteSessionService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Closes a remote session and dispatches REMOTE_VIEW_STOP to the device.
+   * Idempotent: returns the session if already closed instead of throwing.
    */
   async close(tenantId: string, sessionId: string): Promise<RemoteSession> {
     const session = await this.findOne(tenantId, sessionId);
 
+    // Idempotent: already closed is not an error
     if (session.status === RemoteSessionStatus.CLOSED) {
-      throw new BadRequestException('Session is already closed');
+      return session;
     }
 
     session.status = RemoteSessionStatus.CLOSED;
