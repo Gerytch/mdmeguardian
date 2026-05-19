@@ -25,6 +25,7 @@ import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
+import com.mdm.enterprise.admin.MdmDeviceAdminReceiver
 import com.mdm.enterprise.ui.RemoteAccessActivity
 import kotlinx.coroutines.*
 import okhttp3.*
@@ -140,10 +141,33 @@ class RemoteViewService : Service() {
 
     // ── Wake lock ──────────────────────────────────────────────────────
 
+    @Suppress("DEPRECATION")
     private fun acquireWakeLock() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MDM:RemoteView")
+        // FULL_WAKE_LOCK + ACQUIRE_CAUSES_WAKEUP turns the screen on and keeps it on
+        // while the remote session is active (required for AccessibilityService capture)
+        wakeLock = pm.newWakeLock(
+            PowerManager.FULL_WAKE_LOCK or
+            PowerManager.ACQUIRE_CAUSES_WAKEUP or
+            PowerManager.ON_AFTER_RELEASE,
+            "MDM:RemoteView"
+        )
         wakeLock?.acquire(30 * 60 * 1000L)
+
+        // Dismiss the keyguard (lock screen) so MediaProjection dialog and
+        // H.264 pipeline work without the user needing to swipe-to-unlock.
+        // Re-enabled in onDestroy().
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE)
+                as android.app.admin.DevicePolicyManager
+            val admin = android.content.ComponentName(this, MdmDeviceAdminReceiver::class.java)
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                dpm.setKeyguardDisabled(admin, true)
+                Log.i(TAG, "Keyguard disabled for remote session")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not disable keyguard: ${e.message}")
+        }
     }
 
     // ── WebSocket ──────────────────────────────────────────────────────
@@ -480,6 +504,19 @@ class RemoteViewService : Service() {
         scope.cancel()
         webSocket?.close(1000, "Service stopped")
         wakeLock?.let { if (it.isHeld) it.release() }
+
+        // Re-enable keyguard (lock screen) after remote session ends
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE)
+                as android.app.admin.DevicePolicyManager
+            val admin = android.content.ComponentName(this, MdmDeviceAdminReceiver::class.java)
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                dpm.setKeyguardDisabled(admin, false)
+                Log.i(TAG, "Keyguard re-enabled after remote session")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not re-enable keyguard: ${e.message}")
+        }
 
         Log.i(TAG, "RemoteViewService destroyed")
         super.onDestroy()

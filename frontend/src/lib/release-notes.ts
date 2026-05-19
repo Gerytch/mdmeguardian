@@ -25,10 +25,12 @@ export const releaseNotes: ReleaseNote[] = [
   {
     version: '0.18.2',
     date: '2026-05-18',
-    title: 'Acesso Remoto — Funciona com Tela Desligada',
+    title: 'Acesso Remoto — Funciona com Tela Bloqueada',
     type: 'APK',
     apkItems: [
       'Corrigido: Acesso remoto ficava em loading infinito se a tela do celular estivesse desligada — agora liga a tela automaticamente antes de iniciar a captura',
+      'Corrigido: Tela H.264 voltava ao loading após aprovar permissão com celular bloqueado — keyguard é desabilitado durante a sessão remota (Device Owner) e reabilitado ao encerrar',
+      'Melhoria: Dialog de permissão do MediaProjection agora aparece sobre a tela de bloqueio sem necessidade de desbloquear manualmente',
     ],
   },
   {
