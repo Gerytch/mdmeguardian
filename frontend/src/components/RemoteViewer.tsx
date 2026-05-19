@@ -104,6 +104,9 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
   const [connected, setConnected] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [fps, setFps] = useState(0)
   const [streamMode, setStreamMode] = useState<'jpeg' | 'h264'>('jpeg')
@@ -381,8 +384,27 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
     }
   }
 
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {})
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {})
+    }
+  }
+
+  const handleClose = () => {
+    setShowCloseConfirm(true)
+  }
+
+  const confirmClose = () => {
+    setShowCloseConfirm(false)
+    wsRef.current?.close()
+    onClose()
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-white">
         <div className="flex items-center gap-3">
@@ -406,10 +428,22 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
             </span>
           </span>
           <button
-            onClick={() => {
-              wsRef.current?.close()
-              onClose()
-            }}
+            onClick={toggleFullscreen}
+            className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+          >
+            {isFullscreen ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0v5m0-5h5m6 6l5 5m0 0v-5m0 5h-5M9 15l-5 5m0 0h5m-5 0v-5m11-6l5-5m0 0h-5m5 0v5" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={handleClose}
             className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
           >
             Encerrar
@@ -469,6 +503,30 @@ export default function RemoteViewer({ sessionId, deviceName, onClose }: RemoteV
           <span className="text-[10px]">Recentes</span>
         </button>
       </div>
+
+      {/* Close confirmation dialog */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-sm mx-4 shadow-2xl border border-gray-700">
+            <h3 className="text-white font-semibold text-lg mb-2">Encerrar acesso remoto?</h3>
+            <p className="text-gray-400 text-sm mb-5">A conexao com o dispositivo sera encerrada.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmClose}
+                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Encerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

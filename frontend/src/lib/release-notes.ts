@@ -23,6 +23,20 @@ export interface ReleaseNote {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '0.18.0',
+    date: '2026-05-18',
+    title: 'Acesso Remoto — Sessao Gerenciada + Tela Cheia',
+    type: 'Sistema',
+    systemItems: [
+      'Corrigido: Sessao remota ficava ativa ao navegar para outra pagina — agora fecha automaticamente ao sair',
+      'Corrigido: Sessoes PENDING que nunca conectam sao auto-fechadas apos 30 segundos',
+      'Novo: Botao muda de estado — "Acesso Remoto" vira "Encerrar Acesso Remoto" (vermelho) quando ativo',
+      'Novo: Botao de tela cheia no viewer remoto',
+      'Novo: Confirmacao antes de encerrar o acesso remoto',
+      'Melhoria: Feedback de erros ao fechar sessao (log em vez de erro silencioso)',
+    ],
+  },
+  {
     version: '0.17.2',
     date: '2026-05-18',
     title: 'Correção do Acesso Remoto — Tela Congelada após Permissão',

@@ -100,6 +100,7 @@ export default function DeviceDetailPage() {
   const [remoteSessionId, setRemoteSessionId] = useState<string | null>(null)
   const [showRemoteViewer, setShowRemoteViewer] = useState(false)
   const [startingRemote, setStartingRemote] = useState(false)
+  const remoteSessionRef = useRef<string | null>(null)
 
   const tenantId = getTenantId()
 
@@ -284,6 +285,7 @@ export default function DeviceDetailPage() {
     try {
       const res = await remoteSessionsApi.create(tenantId, device.id)
       setRemoteSessionId(res.data.id)
+      remoteSessionRef.current = res.data.id
       setShowRemoteViewer(true)
     } catch (err: any) {
       setMsg({ type: 'error', text: err.response?.data?.message || 'Erro ao iniciar acesso remoto' })
@@ -293,14 +295,29 @@ export default function DeviceDetailPage() {
   }
 
   const stopRemoteView = async () => {
-    if (remoteSessionId) {
+    const sid = remoteSessionId || remoteSessionRef.current
+    if (sid) {
       try {
-        await remoteSessionsApi.close(tenantId, remoteSessionId)
-      } catch {}
+        await remoteSessionsApi.close(tenantId, sid)
+      } catch (err: any) {
+        console.error('Erro ao fechar sessão remota:', err)
+      }
     }
     setShowRemoteViewer(false)
     setRemoteSessionId(null)
+    remoteSessionRef.current = null
   }
+
+  // Cleanup: close remote session when navigating away from the page
+  useEffect(() => {
+    return () => {
+      const sid = remoteSessionRef.current
+      if (sid) {
+        remoteSessionsApi.close(tenantId, sid).catch(() => {})
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const runNetworkTest = async () => {
     if (!device) return
@@ -674,20 +691,30 @@ export default function DeviceDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-                <button
-                  onClick={startRemoteView}
-                  disabled={!!sending || !device?.isOnline || startingRemote}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-purple-200 text-purple-800 hover:bg-purple-50 disabled:opacity-50"
-                >
-                  <span className="flex items-center gap-2">🖥️ Acesso Remoto</span>
-                  {startingRemote ? (
-                    <span className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
+                {showRemoteViewer ? (
+                  <button
+                    onClick={stopRemoteView}
+                    className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-red-300 text-red-700 bg-red-50 hover:bg-red-100"
+                  >
+                    <span className="flex items-center gap-2">🖥️ Encerrar Acesso Remoto</span>
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={startRemoteView}
+                    disabled={!!sending || !device?.isOnline || startingRemote}
+                    className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between border border-purple-200 text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-2">🖥️ Acesso Remoto</span>
+                    {startingRemote ? (
+                      <span className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
