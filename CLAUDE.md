@@ -43,14 +43,14 @@ npm install
 npm run dev
 ```
 
-### Android (emulador)
+### Android (homolog — build padrão)
 ```bash
-# Build APK debug
+# Build APK homolog (JAVA_HOME deve apontar para o JBR do Android Studio)
 cd android
-./gradlew assembleDebug
+JAVA_HOME="C:\Program Files\Android\Android Studio\jbr" ./gradlew.bat assembleHomolog
 
-# Instalar no emulador
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+# Instalar no device
+adb install -r app/build/outputs/apk/homolog/app-homolog.apk
 
 # Setar como Device Owner (obrigatório para kiosk/admin lock)
 adb shell dpm set-device-owner com.mdm.enterprise.debug/com.mdm.enterprise.admin.MdmDeviceAdminReceiver

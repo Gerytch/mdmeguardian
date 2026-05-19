@@ -34,7 +34,9 @@ export const releaseNotes: ReleaseNote[] = [
       'Melhoria: Frontend cacheia config H.264 que chega antes do decoder estar pronto (safety net para chipsets rápidos)',
     ],
     apkItems: [
-      'Corrigido: Notificação de stream_upgrade agora é enviada antes de iniciar a produção de frames — garante que o viewer está pronto',
+      'Corrigido: MediaProjection.registerCallback() obrigatório no Android 14+ — sem ele createVirtualDisplay() falhava silenciosamente e a pipeline H.264 nunca iniciava',
+      'Corrigido: Fallback para JPEG se pipeline H.264 falhar — evita tela preta',
+      'Melhoria: stream_upgrade enviado somente após pipeline H.264 iniciar com sucesso',
     ],
   },
   {

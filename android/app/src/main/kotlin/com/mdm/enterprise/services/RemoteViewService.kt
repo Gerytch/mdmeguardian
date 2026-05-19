@@ -257,10 +257,25 @@ class RemoteViewService : Service() {
                 return
             }
 
+            // Android 14+ requires a callback registered BEFORE createVirtualDisplay
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                mediaProjection!!.registerCallback(object : MediaProjection.Callback() {
+                    override fun onStop() {
+                        Log.i(TAG, "MediaProjection stopped by system")
+                        isH264Mode = false
+                        stopSelf()
+                    }
+                }, Handler(mainLooper))
+            }
+
             startH264Pipeline()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start H.264 pipeline: ${e.message}", e)
-            // Stay in JPEG mode
+            // Stay in JPEG mode — restart JPEG capture if it was cancelled
+            if (isH264Mode) {
+                isH264Mode = false
+                webSocket?.let { startJpegCapture(it) }
+            }
         }
     }
 
@@ -332,20 +347,7 @@ class RemoteViewService : Service() {
         val inputSurface = encoder!!.createInputSurface()
         encoder!!.start()
 
-        isH264Mode = true
-
-        // Notify viewers BEFORE creating virtual display — the virtual display triggers
-        // frame production on the encoder, so the viewer must have its decoder ready first.
-        // Without this ordering, FRAME_CONFIG arrives before stream_upgrade and the frontend
-        // treats it as JPEG (fails silently) → decoder never gets configured → screen freezes.
-        webSocket?.send(JSONObject().apply {
-            put("type", "stream_upgrade")
-            put("codec", "h264")
-            put("width", encoderWidth)
-            put("height", encoderHeight)
-        }.toString())
-
-        // NOW create virtual display — frames start flowing into the encoder
+        // Create virtual display — this may throw on Android 14+ if callback not registered
         virtualDisplay = mediaProjection!!.createVirtualDisplay(
             "RemoteStream",
             encoderWidth, encoderHeight,
@@ -354,7 +356,17 @@ class RemoteViewService : Service() {
             inputSurface, null, null
         )
 
+        // Only mark H.264 mode AFTER successful pipeline setup
+        isH264Mode = true
         Log.i(TAG, "H.264 streaming started (${encoderWidth}x${encoderHeight} @ ${H264_FPS}fps)")
+
+        // Notify viewers to switch decoder
+        webSocket?.send(JSONObject().apply {
+            put("type", "stream_upgrade")
+            put("codec", "h264")
+            put("width", encoderWidth)
+            put("height", encoderHeight)
+        }.toString())
     }
 
     // ── Notification (required for foreground service) ──────────────────
